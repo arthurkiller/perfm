@@ -1,6 +1,11 @@
 package perfM
 
-import "time"
+import (
+	"log"
+	"time"
+
+	_ "github.com/VividCortex/gohistogram"
+)
 
 type Job interface {
 	Done(PerfMonitor) error //count the cost about this job and add to the perfmonitor count channel
@@ -17,12 +22,13 @@ func (j *job) Done(p *perfMonitor) error {
 }
 
 type PerfMonitor interface {
-	Start() error     //start the perf monitor
-	Stop() error      //stop the perf montior
-	Do() (Job, error) //set a timer to count the single request's cost
+	Start() error    //start the perf monitor
+	Stop() error     //stop the perf montior
+	Do() (Job, erro) //set a timer to count the single request's cost
 }
 
 type perfMonitor struct {
+	done           chan bool          //stor the perfM
 	counter        int                //count the sum of the request
 	startTime      time.Time          //keep the start time
 	timer          time.Timer         //the frequency sampling timer
@@ -50,8 +56,11 @@ func (p *perfMonitor) Start() error {
 			p.localTimeCount += cost
 		case <-p.timer:
 			//TODO:show the courently performence info
+			log.Println("Qps: ", p.localCount, "")
 			p.localCount = 0
 			p.localTimeCount = 0
+		case <-p.done:
+			return nil
 		}
 	}
 	return nil
@@ -59,6 +68,8 @@ func (p *perfMonitor) Start() error {
 
 func (p *perfMonitor) Stop() error {
 	//TODO:show the info of the performence test
+	p.done <- true
+	return nil
 }
 
 func (p *perfMonitor) Do() (*Job, error) {
