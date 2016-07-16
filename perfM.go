@@ -1,28 +1,28 @@
-package profM
+package perfM
 
 import "time"
 
 type Job interface {
-	Done(ProfMonitor) error //count the cost about this job and add to the profmonitor count channel
+	Done(PerfMonitor) error //count the cost about this job and add to the perfmonitor count channel
 }
 
 type job struct {
 	start time.Time //set for every single request start time
 }
 
-func (j *job) Done(p *pronfMonitor) error {
+func (j *job) Done(p *perfMonitor) error {
 	cost := time.Since(j.start)
 	p.GlobalChannel <- cost
 	return nil
 }
 
-type ProfMonitor interface {
-	Start() error     //start the prof monitor
-	Stop() error      //stop the prof montior
+type PerfMonitor interface {
+	Start() error     //start the perf monitor
+	Stop() error      //stop the perf montior
 	Do() (Job, error) //set a timer to count the single request's cost
 }
 
-type profMonitor struct {
+type perfMonitor struct {
 	counter        int                //count the sum of the request
 	startTime      time.Time          //keep the start time
 	timer          time.Timer         //the frequency sampling timer
@@ -32,7 +32,7 @@ type profMonitor struct {
 }
 
 func New(conf Config) {
-	return &pronfMonitor{
+	return &perfMonitor{
 		counter:       0,
 		startTime:     time.Time,
 		timer:         time.NewTimer(time.Second * int64(conf.Frequency)),
@@ -40,7 +40,7 @@ func New(conf Config) {
 	}
 }
 
-func (p *profMonitor) Start() error {
+func (p *perfMonitor) Start() error {
 	p.startTime = time.Now()
 	for {
 		select {
@@ -49,7 +49,7 @@ func (p *profMonitor) Start() error {
 			p.localCount++
 			p.localTimeCount += cost
 		case <-p.timer:
-			//TODO:show the courently prof info
+			//TODO:show the courently performence info
 			p.localCount = 0
 			p.localTimeCount = 0
 		}
@@ -57,11 +57,11 @@ func (p *profMonitor) Start() error {
 	return nil
 }
 
-func (p *profMonitor) Stop() error {
-	//TODO:show the info of the prof test
+func (p *perfMonitor) Stop() error {
+	//TODO:show the info of the performence test
 }
 
-func (p *profMonitor) Do() (*Job, error) {
+func (p *perfMonitor) Do() (*Job, error) {
 	presentJob := new(job)
 	presentJob.start = time.Now()
 	return presentJob, nil
