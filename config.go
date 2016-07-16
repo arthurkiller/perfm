@@ -1,6 +1,6 @@
-package profM
+package perfM
 
 type Config struct {
-	Frequency  int `set for the sampling frequency`
-	BufferSize int `set for the global time channel buffer size`
+	Frequency  int //set for the sampling frequency
+	BufferSize int //set for the global time channel buffer size
 }
