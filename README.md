@@ -1,4 +1,5 @@
 # PerfM
+[![Build Status](https://travis-ci.org/arthurkiller/perfM.svg?branch=master)](https://travis-ci.org/arthurkiller/perfM)
 a golang performence testing platform
 
 ## Milestone
