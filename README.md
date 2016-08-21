@@ -1,5 +1,5 @@
 # PerfM
-a golang performence testing platform
+A golang performence testing platform
 
 ## Milestone
 * version 0.1 
