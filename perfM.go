@@ -28,7 +28,7 @@ type PerfMonitor interface {
 }
 
 type perfMonitor struct {
-	done           chan bool              //stor the perfM
+	done           chan int               //stor the perfM
 	counter        int                    //count the sum of the request
 	startTime      time.Time              //keep the start time
 	timer          <-chan time.Time       //the frequency sampling timer
@@ -36,6 +36,7 @@ type perfMonitor struct {
 	localCount     int                    //count for the number in the sampling times
 	localTimeCount time.Duration          //count for the sampling time total costs
 	histogram      *hist.NumericHistogram //used to print the histogram
+	Buffer         chan float64           //buffer the test time to decrease the influence when add to the historgam
 }
 
 func New(conf Config) PerfMonitor {
@@ -45,11 +46,13 @@ func New(conf Config) PerfMonitor {
 		conf.Frequency = 1
 	}
 	return &perfMonitor{
+		done:      make(chan int, 0),
 		counter:   0,
 		startTime: time.Now(),
 		timer:     time.Tick(time.Duration(int64(1000000000 * conf.Frequency))),
 		Collector: make(chan time.Duration, conf.BufferSize),
 		histogram: hist.NewHistogram(conf.BinsNumber),
+		Buffer:    make(chan float64, 100000000),
 	}
 }
 
@@ -61,7 +64,7 @@ func (p *perfMonitor) Start() {
 			p.counter++
 			p.localCount++
 			p.localTimeCount += cost
-			p.histogram.Add(float64(cost))
+			p.Buffer <- float64(cost)
 		case <-p.timer:
 			if p.localCount == 0 {
 				continue
@@ -77,7 +80,16 @@ func (p *perfMonitor) Start() {
 
 func (p *perfMonitor) Stop() {
 	//TODO:show the info of the performence test
-	p.done <- true
+	for {
+		select {
+		case d := <-p.Buffer:
+			p.histogram.Add(d)
+		default:
+			goto next
+		}
+	}
+next:
+	p.done <- 1
 	//show the summery
 	log.Println("Total Recv: ", p.counter)
 
