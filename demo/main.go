@@ -2,10 +2,12 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ func main() {
 
 	for {
 		s, err := br.ReadString('\n')
+		s = strings.Trim(s, "\n")
 		if err != nil {
 			if err != io.EOF {
 				log.Println(err)
@@ -34,12 +37,16 @@ func main() {
 			}
 			break
 		}
-		i, _ := strconv.Atoi(s)
+
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			fmt.Println(err)
+		}
 		i %= 10
 		wg.Add(1)
 		go func() {
 			t := perfm.Do()
-			time.Sleep(time.Millisecond * time.Duration(i))
+			time.Sleep(100 * time.Millisecond * time.Duration(i))
 			t.Done(perfm)
 			defer wg.Done()
 		}()
