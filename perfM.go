@@ -79,22 +79,18 @@ func (p *perfMonitor) Start() {
 }
 
 func (p *perfMonitor) Stop() {
-	//TODO:show the info of the performence test
 	for {
 		select {
 		case d := <-p.Buffer:
 			p.histogram.Add(d)
 		default:
-			goto next
+			p.done <- 1
+			// here show the histogram
+			log.Println(p.histogram.String())
+			return
 		}
 	}
-next:
-	p.done <- 1
-	//show the summery
-	log.Println("Total Recv: ", p.counter)
 
-	// here show the histogram
-	log.Println(p.histogram.String())
 }
 
 func (p *perfMonitor) Do() Job {
