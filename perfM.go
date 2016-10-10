@@ -7,6 +7,7 @@ import (
 	hist "github.com/VividCortex/gohistogram"
 )
 
+//Job defined the timer
 type Job interface {
 	Done(PerfMonitor) //count the cost about this job and add to the perfmonitor count channel
 }
@@ -20,6 +21,7 @@ func (j *job) Done(p PerfMonitor) {
 	p.collect(cost)
 }
 
+//PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
 	Start()                //start the perf monitor
 	Stop()                 //stop the perf montior
@@ -39,6 +41,7 @@ type perfMonitor struct {
 	Buffer         chan float64           //buffer the test time to decrease the influence when add to the historgam
 }
 
+//New gengrate the perfm monitor
 func New(conf Config) PerfMonitor {
 	if conf.BinsNumber == 0 {
 		conf.BinsNumber = 10
