@@ -7,7 +7,7 @@ type Config struct {
 	BinsNumber int //set the histogram bins number
 }
 
-//new gen the config
+//NewConfig gen the config
 func NewConfig(options ...Options) Config {
 	c := Config{}
 	for _, o := range options {
@@ -26,14 +26,14 @@ func WithFrequency(i int) Options {
 	}
 }
 
-//WithBuffersize set the buffer size of config
+//WithBufferSize set the buffer size of config
 func WithBufferSize(i int) Options {
 	return func(o *Config) {
 		o.BufferSize = i
 	}
 }
 
-//Withbinsnumber set the bins number of config
+//WithBinsNumber set the bins number of config
 func WithBinsNumber(i int) Options {
 	return func(o *Config) {
 		o.BinsNumber = i
