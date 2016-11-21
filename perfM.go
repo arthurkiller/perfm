@@ -9,16 +9,17 @@ import (
 
 //Job defined the timer
 type Job interface {
-	Done(PerfMonitor) //count the cost about this job and add to the perfmonitor count channel
+	Done() //count the cost about this job and add to the perfmonitor count channel
 }
 
 type job struct {
-	start time.Time //set for every single request start time
+	start time.Time    //set for every single request start time
+	p     *perfMonitor //store the perf monitor use for timer
 }
 
-func (j *job) Done(p PerfMonitor) {
+func (j *job) Done() {
 	cost := time.Since(j.start)
-	p.collect(cost)
+	j.p.collect(cost)
 }
 
 //PerfMonitor define the atcion about perfmonitor
@@ -99,6 +100,7 @@ func (p *perfMonitor) Stop() {
 func (p *perfMonitor) Do() Job {
 	presentJob := new(job)
 	presentJob.start = time.Now()
+	presentJob.p = p
 	return presentJob
 }
 
