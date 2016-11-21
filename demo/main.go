@@ -49,7 +49,7 @@ func main() {
 		go func() {
 			t := perfm.Do()
 			time.Sleep(200 * time.Millisecond * time.Duration(i))
-			t.Done(perfm)
+			t.Done()
 			defer wg.Done()
 		}()
 	}
