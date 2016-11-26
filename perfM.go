@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	hist "github.com/VividCortex/gohistogram"
+	hist "github.com/shafreeck/fperf/stats"
 )
 
 //Job defined the timer
@@ -31,44 +31,69 @@ type PerfMonitor interface {
 }
 
 type perfMonitor struct {
-	done           chan int               //stor the perfM
-	counter        int                    //count the sum of the request
-	startTime      time.Time              //keep the start time
-	timer          <-chan time.Time       //the frequency sampling timer
-	Collector      chan time.Duration     //get the request cost from every done()
-	localCount     int                    //count for the number in the sampling times
-	localTimeCount time.Duration          //count for the sampling time total costs
-	histogram      *hist.NumericHistogram //used to print the histogram
-	Buffer         chan float64           //buffer the test time to decrease the influence when add to the historgam
+	done           chan int           //stor the perfM
+	counter        int                //count the sum of the request
+	startTime      time.Time          //keep the start time
+	timer          <-chan time.Time   //the frequency sampling timer
+	Collector      chan time.Duration //get the request cost from every done()
+	localCount     int                //count for the number in the sampling times
+	localTimeCount time.Duration      //count for the sampling time total costs
+	histogram      *hist.Histogram    //used to print the histogram
+	Buffer         chan int64         //buffer the test time to decrease the influence when add to the historgam
+	NoPrint        bool
 }
 
 //New gengrate the perfm monitor
 func New(conf Config) PerfMonitor {
-	if conf.BinsNumber == 0 {
-		conf.BinsNumber = 10
-		conf.BufferSize = 1000000
-		conf.Frequency = 1
+	histopt := hist.HistogramOptions{
+		NumBuckets:     conf.BinsNumber,
+		GrowthFactor:   conf.GrowthFactor,
+		BaseBucketSize: conf.BaseBucketSize,
+		MinValue:       conf.MinValue,
 	}
+
 	return &perfMonitor{
 		done:      make(chan int, 0),
 		counter:   0,
 		startTime: time.Now(),
-		timer:     time.Tick(time.Duration(int64(1000000000 * conf.Frequency))),
+		timer:     time.Tick(time.Second * time.Duration(conf.Frequency)),
 		Collector: make(chan time.Duration, conf.BufferSize),
-		histogram: hist.NewHistogram(conf.BinsNumber),
-		Buffer:    make(chan float64, 100000000),
+		histogram: hist.NewHistogram(histopt),
+		Buffer:    make(chan int64, 100000000),
+		NoPrint:   conf.NoPrint,
 	}
 }
 
 func (p *perfMonitor) Start() {
 	p.startTime = time.Now()
+	if p.NoPrint {
+		for {
+			select {
+			case cost := <-p.Collector:
+				p.counter++
+				p.localCount++
+				p.localTimeCount += cost
+				p.Buffer <- int64(cost)
+			case <-p.timer:
+				if p.localCount == 0 {
+					continue
+				}
+				log.Println("Qps: ", p.localCount, "Avg Latency: ", p.localTimeCount.Nanoseconds()/int64(p.localCount)/1000000)
+				p.localCount = 0
+				p.localTimeCount = 0
+			case <-p.done:
+				return
+			}
+		}
+		return
+	}
 	for {
 		select {
 		case cost := <-p.Collector:
 			p.counter++
 			p.localCount++
 			p.localTimeCount += cost
-			p.Buffer <- float64(cost)
+			p.Buffer <- int64(cost)
 		case <-p.timer:
 			if p.localCount == 0 {
 				continue
@@ -88,7 +113,7 @@ func (p *perfMonitor) Stop() {
 		case d := <-p.Buffer:
 			p.histogram.Add(d)
 		default:
-			p.done <- 1
+			close(p.done)
 			// here show the histogram
 			log.Println(p.histogram.String())
 			return

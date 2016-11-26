@@ -25,7 +25,7 @@ func main() {
 	br := bufio.NewReader(f)
 	wg := new(sync.WaitGroup)
 
-	conf := perfM.NewConfig(perfM.WithBinsNumber(10))
+	conf := perfM.NewConfig(perfM.WithBinsNumber(15), perfM.WithMinValue(0), perfM.WithGrowthFactor(0.4), perfM.WithBaseBucketSize(20))
 	perfm := perfM.New(conf)
 	go perfm.Start()
 
@@ -48,7 +48,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			t := perfm.Do()
-			time.Sleep(200 * time.Millisecond * time.Duration(i))
+			time.Sleep(500 * time.Millisecond * time.Duration(i))
 			t.Done()
 			defer wg.Done()
 		}()
