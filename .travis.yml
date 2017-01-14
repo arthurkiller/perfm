@@ -16,7 +16,8 @@ env:
    - TARGET=arm64
    - TARGET=arm
    - TARGET=386
-   - TARGET=ppc64le
+   - TARGET=x86
+   - TARGET=x64
 
 matrix:
   fast_finish: true
