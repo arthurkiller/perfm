@@ -85,7 +85,6 @@ func (p *perfmonitor) Start() {
 				return
 			}
 		}
-		return
 	}
 	for {
 		select {
