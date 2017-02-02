@@ -1,6 +1,6 @@
-package perfM
+package perfm
 
-//Config define the Config about perfM
+//Config define the Config about perfm
 type Config struct {
 	Frequency  int //set for the sampling frequency
 	BufferSize int //set for the global time channel buffer size

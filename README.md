@@ -1,9 +1,9 @@
-# PerfM [![Build Status](https://travis-ci.org/arthurkiller/perfM.svg?branch=master)](https://travis-ci.org/arthurkiller/perfM) [![Go Report Card](https://goreportcard.com/badge/github.com/arthurkiller/perfM)](https://goreportcard.com/report/github.com/arthurkiller/perfM)
+# perfm [![Build Status](https://travis-ci.org/arthurkiller/perfm.svg?branch=master)](https://travis-ci.org/arthurkiller/perfm) [![Go Report Card](https://goreportcard.com/badge/github.com/arthurkiller/perfm)](https://goreportcard.com/report/github.com/arthurkiller/perfm)
 a golang performence testing platform
 
 ## Testing Data
 The testing data was generate by the CPP random engin , the code is in the normal distribute.
-[![pic](demo/screen.png)](github.com/arthurkiller/perfM)
+[![pic](demo/screen.png)](github.com/arthurkiller/perfm)
 
 ```cpp
 #include <iostream>

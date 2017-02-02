@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/arthurkiller/perfM"
+	"github.com/arthurkiller/perfm"
 )
 
 func main() {
@@ -25,8 +25,8 @@ func main() {
 	br := bufio.NewReader(f)
 	wg := new(sync.WaitGroup)
 
-	conf := perfM.NewConfig(perfM.WithBinsNumber(15), perfM.WithMinValue(0), perfM.WithGrowthFactor(0.4), perfM.WithBaseBucketSize(20))
-	perfm := perfM.New(conf)
+	conf := perfm.NewConfig(perfm.WithBinsNumber(15), perfm.WithMinValue(0), perfm.WithGrowthFactor(0.4), perfm.WithBaseBucketSize(20))
+	perfm := perfm.New(conf)
 	go perfm.Start()
 
 	for {
