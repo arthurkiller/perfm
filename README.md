@@ -27,4 +27,4 @@ int main()
 * version 0.1 
     support the qps and average cost counting
 * version 0.2
-    add the presur testing feature to support the presure performence testing
+    change the perfm into a testing interface, just implement the perfm and then the test will be automaticly
