@@ -1,46 +1,43 @@
 package perfm
 
 import (
-	"log"
+	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	hist "github.com/shafreeck/fperf/stats"
 )
 
-//Job defined the timer
-type Job interface {
-	Done() //count the cost about this job and add to the perfmonitor count channel
-}
-
-type job struct {
-	start time.Time    //set for every single request start time
-	p     *perfmonitor //store the perf monitor use for timer
-}
-
-func (j *job) Done() {
-	cost := time.Since(j.start)
-	j.p.collect(cost)
-}
-
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
-	Start()                //start the perf monitor
-	Stop()                 //stop the perf montior
-	collect(time.Duration) //send the cost to the channel
-	Do() Job               //set a timer to count the single request's cost
+	Registe(func() error)
+	Start() //start the perf monitor
+	Wait()  //wait for the benchmark done
 }
 
 type perfmonitor struct {
-	done           chan int           //stor the perfm
-	counter        int                //count the sum of the request
+	Sum      int64   //sum of the per request cost
+	Stdev    float64 //Standard Deviation
+	Avg      int64   //Average
+	Total    int64   //total request by count
+	duration int     //test total time
+	number   int     //total test request
+	workers  int     //benchmark parallel worker number
+	noPrint  bool    //disable the stdout print
+
+	done           chan int           //stop the perfm
 	startTime      time.Time          //keep the start time
 	timer          <-chan time.Time   //the frequency sampling timer
-	Collector      chan time.Duration //get the request cost from every done()
+	collector      chan time.Duration //get the request cost from every done()
+	errCollector   chan error         //error collector collect error request
 	localCount     int                //count for the number in the sampling times
 	localTimeCount time.Duration      //count for the sampling time total costs
+	buffer         chan int64         //buffer the test time for latter add to the historgam
 	histogram      *hist.Histogram    //used to print the histogram
-	Buffer         chan int64         //buffer the test time to decrease the influence when add to the historgam
-	NoPrint        bool
+	wg             sync.WaitGroup     //wait group to block the stop and sync the work thread
+	job            func() error       //job for benchmark, requect will be collected if an error occoured, job must be parallel safe
 }
 
 //New gengrate the perfm monitor
@@ -52,82 +49,137 @@ func New(conf Config) PerfMonitor {
 		MinValue:       conf.MinValue,
 	}
 
-	return &perfmonitor{
-		done:      make(chan int, 0),
-		counter:   0,
-		startTime: time.Now(),
-		timer:     time.Tick(time.Second * time.Duration(conf.Frequency)),
-		Collector: make(chan time.Duration, conf.BufferSize),
-		histogram: hist.NewHistogram(histopt),
-		Buffer:    make(chan int64, 100000000),
-		NoPrint:   conf.NoPrint,
+	var p *perfmonitor = &perfmonitor{
+		done:         make(chan int, 0),
+		workers:      conf.Parallel,
+		duration:     conf.Duration,
+		number:       conf.Number,
+		startTime:    time.Now(),
+		timer:        time.Tick(time.Second * time.Duration(conf.Frequency)),
+		collector:    make(chan time.Duration, conf.BufferSize),
+		errCollector: make(chan error, conf.BufferSize),
+		histogram:    hist.NewHistogram(histopt),
+		buffer:       make(chan int64, 100000000),
+		noPrint:      conf.NoPrint,
+		wg:           sync.WaitGroup{},
 	}
+	return p
+}
+
+func (p *perfmonitor) Registe(job func() error) {
+	p.job = job
 }
 
 func (p *perfmonitor) Start() {
-	p.startTime = time.Now()
-	if p.NoPrint {
+	p.wg.Add(2)
+
+	if p.job == nil {
+		panic("error job does not regist yet")
+	}
+
+	var localwg sync.WaitGroup
+	go func() {
+		p.startTime = time.Now()
+		var cost time.Duration
 		for {
 			select {
-			case cost := <-p.Collector:
-				p.counter++
+			case cost = <-p.collector:
 				p.localCount++
 				p.localTimeCount += cost
-				p.Buffer <- int64(cost)
+				p.buffer <- int64(cost)
 			case <-p.timer:
+				fmt.Println("DBG in print")
 				if p.localCount == 0 {
 					continue
 				}
-				log.Println("Qps: ", p.localCount, "Avg Latency: ", p.localTimeCount.Nanoseconds()/int64(p.localCount)/1000000)
+				fmt.Printf("Qps: %d  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
 				p.localCount = 0
 				p.localTimeCount = 0
 			case <-p.done:
-				return
+				localwg.Wait()
+				for {
+					cost = <-p.collector
+					p.buffer <- int64(cost)
+					if len(p.collector) == 0 {
+						p.wg.Done()
+						return
+					}
+				}
 			}
 		}
-	}
-	for {
-		select {
-		case cost := <-p.Collector:
-			p.counter++
-			p.localCount++
-			p.localTimeCount += cost
-			p.Buffer <- int64(cost)
-		case <-p.timer:
-			if p.localCount == 0 {
-				continue
-			}
-			log.Println("Qps: ", p.localCount, "Avg Latency: ", p.localTimeCount.Nanoseconds()/int64(p.localCount)/1000000)
-			p.localCount = 0
-			p.localTimeCount = 0
-		case <-p.done:
-			return
-		}
-	}
-}
+	}()
 
-func (p *perfmonitor) Stop() {
-	for {
-		select {
-		case d := <-p.Buffer:
-			p.histogram.Add(d)
-		default:
+	// start all the worker and do job till cancelled
+	for i := 0; i < p.workers; i++ {
+		localwg.Add(1)
+		go func() {
+			defer localwg.Done()
+			job := p.job
+			var err error
+			var start time.Time
+			for {
+				select {
+				case <-p.done:
+					return
+				default:
+					start = time.Now()
+					err = job()
+					p.collector <- time.Since(start)
+					atomic.AddInt64(&p.Total, 1)
+					p.errCollector <- err
+				}
+			}
+		}()
+	}
+
+	// stoper to cancell all the workers
+	if p.number > 0 {
+		// in total request module
+		go func() {
+			p.wg.Done()
+			sum := int64(p.number)
+			for {
+				if atomic.LoadInt64(&p.Total) == sum {
+					close(p.done)
+					return
+				}
+				// 500us sleep time will cost 7% cpu time
+				// 1ms sleep time cost only 4% cpu time that could be a better choice
+				time.Sleep(time.Millisecond)
+			}
+		}()
+	} else {
+		// in test duration module
+		go func() {
+			p.wg.Done()
+			time.Sleep(time.Second * time.Duration(p.duration))
 			close(p.done)
-			// here show the histogram
-			log.Println(p.histogram.String())
 			return
+		}()
+	}
+}
+
+func (p *perfmonitor) Wait() {
+	p.wg.Wait()
+	var sum2, i, d int64
+	fmt.Println("DBG BEFORE DRAW", len(p.buffer), p.Total)
+	for i = 0; i < p.Total; i++ {
+		d = <-p.buffer
+		fmt.Println("DBG add", d)
+		err := p.histogram.Add(d)
+		if err != nil {
+			panic(err)
 		}
+		sum2 += d * d
 	}
 
-}
+	fmt.Println("DBG hist", p.histogram.Sum, p.histogram.Count)
+	p.Sum = p.histogram.Sum
+	p.Avg = p.Sum / p.Total
+	p.Stdev = math.Sqrt(float64(sum2) - 2*float64(p.Avg*p.histogram.Sum) + float64(p.histogram.Count*p.Avg*p.Avg)/float64(p.histogram.Count))
 
-func (p *perfmonitor) Do() Job {
-	presentJob := new(job)
-	presentJob.start = time.Now()
-	presentJob.p = p
-	return presentJob
-}
-
-func (p *perfmonitor) collect(t time.Duration) {
-	p.Collector <- t
+	// here show the histogram
+	if !p.noPrint {
+		fmt.Printf("\nSTDEV: %f CV: %f % \n%s\n", p.Stdev, p.Stdev/float64(p.Avg)*100, p.histogram.String())
+	}
 }

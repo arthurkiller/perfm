@@ -1,30 +1,27 @@
 # perfm [![Build Status](https://travis-ci.org/arthurkiller/perfm.svg?branch=master)](https://travis-ci.org/arthurkiller/perfm) [![Go Report Card](https://goreportcard.com/badge/github.com/arthurkiller/perfm)](https://goreportcard.com/report/github.com/arthurkiller/perfm)
 a golang performence testing platform
 
-## Testing Data
-The testing data was generate by the CPP random engin , the code is in the normal distribute.
-[![pic](demo/screen.png)](github.com/arthurkiller/perfm)
+## what's new
+* v1.0 is comming out
+* reconstruct the project for easy use
+* remove the divided operation for bench and caculate
+* only 4 line of code can create a benchmarker, wow
 
-```cpp
-#include <iostream>
-#include <iomanip>
-#include <string>
-#include <random>
-#include <cmath>
-int main()
-{
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<> d(5,2);
-    for(int n=0; n<100000; ++n) {
-        std::cout<<std::round(d(gen))<<std::endl;
-    }
-    return 0;
-}
+## demo client
+```go
+	perfm := perfm.New(perfm.NewConfig())
+	perfm.Registe(func() error {
+		_, err := http.Get("http://www.baidu.com")
+		return err
+	})
+	perfm.Start()
+	perfm.Wait()
+
 ```
+![test demo](./demo/screen.png)
 
-## TODO & Milestone
+## Milestone
 * version 0.1 
     support the qps and average cost counting
-* version 0.2
-    change the perfm into a testing interface, just implement the perfm and then the test will be automaticly
+* version 1.0
+    change the perfm into a testing interface, just rejuest and start, the test will be automaticly done

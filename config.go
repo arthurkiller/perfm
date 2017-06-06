@@ -2,24 +2,22 @@ package perfm
 
 //Config define the Config about perfm
 type Config struct {
-	Frequency  int //set for the sampling frequency
-	BufferSize int //set for the global time channel buffer size
-	BinsNumber int //set the histogram bins number
-
-	// GrowthFactor is the growth factor of the buckets.
+	Duration       int     //set for benchmark time
+	Parallel       int     //test parallel worker numbers
+	Number         int     // test total request
+	NoPrint        bool    // diasble print
+	Frequency      int     //set for the sampling frequency
+	BufferSize     int     //set for the global time channel buffer size
+	BinsNumber     int     //set the histogram bins number
+	GrowthFactor   float64 // GrowthFactor is the growth factor of the buckets.
+	MinValue       int64   // MinValue is the lower bound of the first bucket.
+	BaseBucketSize float64 // BaseBucketSize is the size of the first bucket.
 	// A value of 0.1 indicates that bucket N+1 will be 10% larger than bucket N.
-	GrowthFactor float64
-	// BaseBucketSize is the size of the first bucket.
-	BaseBucketSize float64
-	// MinValue is the lower bound of the first bucket.
-	MinValue int64
-
-	NoPrint bool
 }
 
 //NewConfig gen the config
 func NewConfig(options ...Options) Config {
-	c := Config{1, 655359, 20, 1.4, 1000, 100, false}
+	c := Config{10, 4, 0, false, 1, 6553500, 15, 1.4, 1000000, 1000}
 	for _, o := range options {
 		o(&c)
 	}
@@ -28,6 +26,27 @@ func NewConfig(options ...Options) Config {
 
 //Options define the options of congif
 type Options func(*Config)
+
+//WithParallel set the workers
+func WithParallel(i int) Options {
+	return func(o *Config) {
+		o.Parallel = i
+	}
+}
+
+//WithDuration set the test running duration
+func WithDuration(i int) Options {
+	return func(o *Config) {
+		o.Duration = i
+	}
+}
+
+//WithNumber set the total benchmark request
+func WithNumber(i int) Options {
+	return func(o *Config) {
+		o.Number = i
+	}
+}
 
 //WithFrequency set the frequency
 func WithFrequency(i int) Options {
