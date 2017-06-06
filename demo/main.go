@@ -7,10 +7,8 @@ import (
 )
 
 func main() {
-	conf := perfm.NewConfig(perfm.WithBinsNumber(15), perfm.WithMinValue(0),
-		perfm.WithGrowthFactor(0.4), perfm.WithBaseBucketSize(20), perfm.WithParallel(5))
 
-	perfm := perfm.New(conf)
+	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithMinValue(0), perfm.WithGrowthFactor(0.4), perfm.WithBaseBucketSize(20), perfm.WithParallel(5))
 
 	perfm.Registe(func() error {
 		_, err := http.Get("http://www.baidu.com")

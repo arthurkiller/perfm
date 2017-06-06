@@ -9,7 +9,7 @@ a golang performence testing platform
 
 ## demo client
 ```go
-	perfm := perfm.New(perfm.NewConfig())
+	perfm := perfm.New(perfm.WithParallel(5))
 	perfm.Registe(func() error {
 		_, err := http.Get("http://www.baidu.com")
 		return err

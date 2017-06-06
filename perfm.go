@@ -41,7 +41,9 @@ type perfmonitor struct {
 }
 
 //New gengrate the perfm monitor
-func New(conf Config) PerfMonitor {
+func New(options ...Options) PerfMonitor {
+	conf := newConfig(options...)
+
 	histopt := hist.HistogramOptions{
 		NumBuckets:     conf.BinsNumber,
 		GrowthFactor:   conf.GrowthFactor,
