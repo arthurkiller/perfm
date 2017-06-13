@@ -17,7 +17,7 @@ type Config struct {
 
 //NewConfig gen the config
 func newConfig(options ...Options) Config {
-	c := Config{10, 4, 0, false, 1, 6553500, 15, 1.4, 1000000, 1000}
+	c := Config{10, 4, 0, false, 1, 6553500, 15, 1.4, 1000000, 1000000}
 	for _, o := range options {
 		o(&c)
 	}
