@@ -69,21 +69,6 @@ func WithBinsNumber(i int) Options {
 	}
 }
 
-func WithGrowthFactor(i float64) Options {
-	return func(o *Config) {
-		o.GrowthFactor = i
-	}
-}
-func WithBaseBucketSize(i float64) Options {
-	return func(o *Config) {
-		o.BaseBucketSize = i
-	}
-}
-func WithMinValue(i int64) Options {
-	return func(o *Config) {
-		o.MinValue = i
-	}
-}
 func WithNoPrint() Options {
 	return func(o *Config) {
 		o.NoPrint = true
