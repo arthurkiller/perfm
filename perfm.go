@@ -8,7 +8,6 @@ import (
 	"time"
 
 	hist "github.com/VividCortex/gohistogram"
-	//hist "github.com/shafreeck/fperf/stats"
 )
 
 //PerfMonitor define the atcion about perfmonitor
@@ -45,13 +44,6 @@ type perfmonitor struct {
 func New(options ...Options) PerfMonitor {
 	conf := newConfig(options...)
 
-	//histopt := hist.HistogramOptions{
-	//	NumBuckets:     conf.BinsNumber,
-	//	GrowthFactor:   conf.GrowthFactor,
-	//	BaseBucketSize: conf.BaseBucketSize,
-	//	MinValue:       conf.MinValue,
-	//}
-
 	var p *perfmonitor = &perfmonitor{
 		done:         make(chan int, 0),
 		workers:      conf.Parallel,
@@ -61,11 +53,10 @@ func New(options ...Options) PerfMonitor {
 		timer:        time.Tick(time.Second * time.Duration(conf.Frequency)),
 		collector:    make(chan time.Duration, conf.BufferSize),
 		errCollector: make(chan error, conf.BufferSize),
-		//histogram:    hist.NewHistogram(histopt),
-		histogram: hist.NewHistogram(conf.BinsNumber),
-		buffer:    make(chan int64, 100000000),
-		noPrint:   conf.NoPrint,
-		wg:        sync.WaitGroup{},
+		histogram:    hist.NewHistogram(conf.BinsNumber),
+		buffer:       make(chan int64, 100000000),
+		noPrint:      conf.NoPrint,
+		wg:           sync.WaitGroup{},
 	}
 	return p
 }
@@ -92,7 +83,6 @@ func (p *perfmonitor) Start() {
 				p.localTimeCount += cost
 				p.buffer <- int64(cost)
 			case <-p.timer:
-				fmt.Println("DBG in print")
 				if p.localCount == 0 {
 					continue
 				}
@@ -101,7 +91,6 @@ func (p *perfmonitor) Start() {
 				p.localTimeCount = 0
 			case <-p.done:
 				localwg.Wait()
-				fmt.Println("DBG wati for workers")
 				for {
 					cost = <-p.collector
 					p.buffer <- int64(cost)
@@ -149,14 +138,13 @@ func (p *perfmonitor) Start() {
 					return
 				}
 				// 500us sleep time will cost 7% cpu time
-				// 1ms sleep time cost only 4% cpu time that could be a better choice
+				//   1ms sleep time cost only 4% cpu time that could be a better choice
 				time.Sleep(time.Millisecond)
 			}
 		}()
 	} else {
 		// in test duration module
 		go func() {
-			fmt.Println("DBG in duration stoper")
 			p.wg.Done()
 			time.Sleep(time.Second * time.Duration(p.duration))
 			close(p.done)
@@ -167,22 +155,27 @@ func (p *perfmonitor) Start() {
 
 func (p *perfmonitor) Wait() {
 	p.wg.Wait()
-	var sum2, i, d int64
-	fmt.Println("DBG BEFORE DRAW", len(p.buffer), p.Total)
+	var sum2, i, d, max, min int64
+	min = 0x7fffffffffffffff
 	for i = 0; i < p.Total; i++ {
 		d = <-p.buffer
-		//fmt.Println("DBG add", d)
 		p.histogram.Add(float64(d))
 		p.Sum += d
 		sum2 += d * d
+		if d > max {
+			max = d
+		}
+		if d < min {
+			min = d
+		}
 	}
-	fmt.Println("DBG after caculate")
 
 	p.Avg = p.Sum / p.Total
-	p.Stdev = math.Sqrt(float64(sum2) - 2*float64(p.Avg*p.Sum) + float64(p.Total*p.Avg*p.Avg)/float64(p.Total))
+	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Avg*p.Sum) + float64(p.Total*p.Avg*p.Avg)) / float64(p.Total))
 
 	// here show the histogram
 	if !p.noPrint {
-		fmt.Printf("\nSTDEV: %f CV: %f % \n%s\n", p.Stdev, p.Stdev/float64(p.Avg)*100, p.histogram.String())
+		fmt.Printf("\nMAX: %.3vms MIN: %.3vms STDEV: %.3fms CV: %.3f %% ", max/1000000, min/1000000, p.Stdev/1000000, p.Stdev/float64(p.Avg)*100)
+		fmt.Println(p.histogram)
 	}
 }
