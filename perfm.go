@@ -31,7 +31,7 @@ type perfmonitor struct {
 	startTime      time.Time          //keep the start time
 	timer          <-chan time.Time   //the frequency sampling timer
 	collector      chan time.Duration //get the request cost from every done()
-	errCollector   chan error         //error collector collect error request
+	errCount       int64              //error counter count error request
 	localCount     int                //count for the number in the sampling times
 	localTimeCount time.Duration      //count for the sampling time total costs
 	buffer         chan int64         //buffer the test time for latter add to the historgam
@@ -45,18 +45,17 @@ func New(options ...Options) PerfMonitor {
 	conf := newConfig(options...)
 
 	var p *perfmonitor = &perfmonitor{
-		done:         make(chan int, 0),
-		workers:      conf.Parallel,
-		duration:     conf.Duration,
-		number:       conf.Number,
-		startTime:    time.Now(),
-		timer:        time.Tick(time.Second * time.Duration(conf.Frequency)),
-		collector:    make(chan time.Duration, conf.BufferSize),
-		errCollector: make(chan error, conf.BufferSize),
-		histogram:    hist.NewHistogram(conf.BinsNumber),
-		buffer:       make(chan int64, 100000000),
-		noPrint:      conf.NoPrint,
-		wg:           sync.WaitGroup{},
+		done:      make(chan int, 0),
+		workers:   conf.Parallel,
+		duration:  conf.Duration,
+		number:    conf.Number,
+		startTime: time.Now(),
+		timer:     time.Tick(time.Second * time.Duration(conf.Frequency)),
+		collector: make(chan time.Duration, conf.BufferSize),
+		histogram: hist.NewHistogram(conf.BinsNumber),
+		buffer:    make(chan int64, 100000000),
+		noPrint:   conf.NoPrint,
+		wg:        sync.WaitGroup{},
 	}
 	return p
 }
@@ -86,7 +85,7 @@ func (p *perfmonitor) Start() {
 				if p.localCount == 0 {
 					continue
 				}
-				fmt.Printf("Qps: %d  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+				fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
 				p.localCount = 0
 				p.localTimeCount = 0
 			case <-p.done:
@@ -120,7 +119,9 @@ func (p *perfmonitor) Start() {
 					err = job()
 					p.collector <- time.Since(start)
 					atomic.AddInt64(&p.Total, 1)
-					p.errCollector <- err
+					if err != nil {
+						atomic.AddInt64(&p.errCount, 1)
+					}
 				}
 			}
 		}()
@@ -175,7 +176,11 @@ func (p *perfmonitor) Wait() {
 
 	// here show the histogram
 	if !p.noPrint {
-		fmt.Printf("\nMAX: %.3vms MIN: %.3vms STDEV: %.3fms CV: %.3f %% ", max/1000000, min/1000000, p.Stdev/1000000, p.Stdev/float64(p.Avg)*100)
+		fmt.Println("\n===============================================\n")
+		if p.errCount != 0 {
+			fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, p.errCount/p.Total)
+		}
+		fmt.Printf("MAX: %.3vms MIN: %.3vms AVG: %.3vms STDEV: %.3fms CV: %.3f%% ", max/1000000, min/1000000, p.Avg/1000000, p.Stdev/1000000, p.Stdev/float64(p.Avg)*100)
 		fmt.Println(p.histogram)
 	}
 }
