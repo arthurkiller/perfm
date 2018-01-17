@@ -7,12 +7,12 @@ import (
 )
 
 func main() {
-	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
+	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(1), perfm.WithNumber(20))
 
-	perfm.Regist(func() (err error) {
-		_, err = http.Get("http://www.baudu.com")
+	perfm.Regist(nil, func() (err error) {
+		_, err = http.Get("http://oa.meitu.com")
 		return err
-	})
+	}, nil)
 
 	perfm.Start()
 	perfm.Wait()

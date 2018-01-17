@@ -12,7 +12,7 @@ import (
 
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
-	Regist(func() error)
+	Regist(pre, do, after func() error)
 	Start() //start the perf monitor
 	Wait()  //wait for the benchmark done
 }
@@ -37,7 +37,10 @@ type perfmonitor struct {
 	buffer         chan int64         //buffer the test time for latter add to the historgam
 	histogram      hist.Histogram     //used to print the histogram
 	wg             sync.WaitGroup     //wait group to block the stop and sync the work thread
-	job            func() error       //job for benchmark, requect will be collected if an error occoured, job must be parallel safe
+
+	pre   func() error //pre action for benchmark
+	job   func() error //job for benchmark, requect will be collected if an error occoured, job must be parallel safe
+	after func() error //after action for benchmark
 }
 
 //New gengrate the perfm monitor
@@ -61,20 +64,21 @@ func New(options ...Options) PerfMonitor {
 }
 
 // Regist a job into perfmonitor fro benchmark
-func (p *perfmonitor) Regist(job func() error) {
+func (p *perfmonitor) Regist(pre, job, after func() error) {
+	p.pre = pre
 	p.job = job
+	p.after = after
 }
 
 // Start the benchmark with given arguments on regisit
 func (p *perfmonitor) Start() {
-	p.wg.Add(2)
-
 	if p.job == nil {
-		panic("error job does not regist yet")
+		panic("error job does not regist correctly")
 	}
 
 	var localwg sync.WaitGroup
 
+	p.wg.Add(1)
 	go func() {
 		p.startTime = time.Now()
 		var cost time.Duration
@@ -93,13 +97,16 @@ func (p *perfmonitor) Start() {
 				p.localTimeCount = 0
 			case <-p.done:
 				localwg.Wait()
-				for cost = range p.collector {
+				close(p.collector)
+				for cost := range p.collector {
+					p.localCount++
+					p.localTimeCount += cost
 					p.buffer <- int64(cost)
-					if len(p.collector) == 0 {
-						p.wg.Done()
-						return
-					}
 				}
+				fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+
+				p.wg.Done()
+				return
 			}
 		}
 	}()
@@ -111,7 +118,9 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
+				pre := p.pre
 				job := p.job
+				after := p.after
 				var err error
 				var start time.Time
 				for {
@@ -119,15 +128,20 @@ func (p *perfmonitor) Start() {
 					case <-p.done:
 						return
 					default:
+						if pre != nil {
+							pre()
+						}
 						start = time.Now()
 						err = job()
 						p.collector <- time.Since(start)
-						atomic.AddInt64(&p.Total, 1)
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
-						// check if the request reach the goal
-						if atomic.LoadInt64(&p.Total) == sum {
+						if after != nil {
+							defer after()
+						}
+						if atomic.AddInt64(&p.Total, 1) == sum {
+							// check if the request reach the goal
 							close(p.done)
 							return
 						}
@@ -142,7 +156,9 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
+				pre := p.pre
 				job := p.job
+				after := p.after
 				var err error
 				var start time.Time
 				for {
@@ -150,10 +166,16 @@ func (p *perfmonitor) Start() {
 					case <-p.done:
 						return
 					default:
+						if pre != nil {
+							pre()
+						}
 						start = time.Now()
 						err = job()
 						p.collector <- time.Since(start)
 						atomic.AddInt64(&p.Total, 1)
+						if after != nil {
+							after()
+						}
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
@@ -161,6 +183,8 @@ func (p *perfmonitor) Start() {
 				}
 			}()
 		}
+
+		p.wg.Add(1)
 		go func() {
 			// stoper to cancell all the workers
 			p.wg.Done()
