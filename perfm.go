@@ -10,11 +10,23 @@ import (
 	hist "github.com/VividCortex/gohistogram"
 )
 
+// Job give out a job for parallel call
+type Job interface {
+	// Copy will copy a job for parallel call
+	Copy() Job
+	// Pre will called before do
+	Pre()
+	// Do contains the core job here
+	Do() error
+	// After contains the clean job after Do called
+	After()
+}
+
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
-	Regist(pre, do, after func() error)
-	Start() //start the perf monitor
-	Wait()  //wait for the benchmark done
+	Regist(job Job) //regist the job to monitor
+	Start()         //start the perf monitor
+	Wait()          //wait for the benchmark done
 }
 
 type perfmonitor struct {
@@ -38,16 +50,17 @@ type perfmonitor struct {
 	histogram      hist.Histogram     //used to print the histogram
 	wg             sync.WaitGroup     //wait group to block the stop and sync the work thread
 
-	pre   func() error //pre action for benchmark
-	job   func() error //job for benchmark, requect will be collected if an error occoured, job must be parallel safe
-	after func() error //after action for benchmark
+	//job implement benchmark job
+	//error will be collected occoured in job.Do
+	job Job
 }
 
 //New gengrate the perfm monitor
 func New(options ...Options) PerfMonitor {
 	conf := newConfig(options...)
 
-	var p *perfmonitor = &perfmonitor{
+	var p *perfmonitor
+	p = &perfmonitor{
 		done:      make(chan int, 0),
 		workers:   conf.Parallel,
 		duration:  conf.Duration,
@@ -64,10 +77,8 @@ func New(options ...Options) PerfMonitor {
 }
 
 // Regist a job into perfmonitor fro benchmark
-func (p *perfmonitor) Regist(pre, job, after func() error) {
-	p.pre = pre
+func (p *perfmonitor) Regist(job Job) {
 	p.job = job
-	p.after = after
 }
 
 // Start the benchmark with given arguments on regisit
@@ -118,9 +129,7 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
-				pre := p.pre
-				job := p.job
-				after := p.after
+				job := p.job.Copy()
 				var err error
 				var start time.Time
 				for {
@@ -128,18 +137,14 @@ func (p *perfmonitor) Start() {
 					case <-p.done:
 						return
 					default:
-						if pre != nil {
-							pre()
-						}
+						job.Pre()
 						start = time.Now()
-						err = job()
+						err = job.Do()
 						p.collector <- time.Since(start)
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
-						if after != nil {
-							defer after()
-						}
+						job.After()
 						if atomic.AddInt64(&p.Total, 1) == sum {
 							// check if the request reach the goal
 							close(p.done)
@@ -156,9 +161,7 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
-				pre := p.pre
-				job := p.job
-				after := p.after
+				job := p.job.Copy()
 				var err error
 				var start time.Time
 				for {
@@ -166,16 +169,12 @@ func (p *perfmonitor) Start() {
 					case <-p.done:
 						return
 					default:
-						if pre != nil {
-							pre()
-						}
+						job.Pre()
 						start = time.Now()
-						err = job()
+						err = job.Do()
 						p.collector <- time.Since(start)
 						atomic.AddInt64(&p.Total, 1)
-						if after != nil {
-							after()
-						}
+						job.After()
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
@@ -218,7 +217,7 @@ func (p *perfmonitor) Wait() {
 
 	// here show the histogram
 	if !p.noPrint {
-		fmt.Println("\n===============================================\n")
+		fmt.Println("\n===============================================")
 		if p.errCount != 0 {
 			fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount/p.Total*100))
 		}

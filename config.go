@@ -69,6 +69,7 @@ func WithBinsNumber(i int) Options {
 	}
 }
 
+//WithNoPrint will disable output during benchmarking
 func WithNoPrint() Options {
 	return func(o *Config) {
 		o.NoPrint = true
