@@ -12,23 +12,21 @@ type job struct {
 }
 
 // Copy will called in parallel
-func (j *job) Copy() *job {
+func (j *job) Copy() perfm.Job {
 	jc := *j
 	return &jc
 }
 
-func (j *job) Pre() error {
+func (j *job) Pre() {
 	// do pre job
-	return nil
 }
 func (j *job) Do() error {
 	// do benchmark job
 	_, err := http.Get(j.url)
 	return err
 }
-func (j *job) After() error {
+func (j *job) After() {
 	// do clean job
-	return nil
 }
 
 func main() {
