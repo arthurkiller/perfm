@@ -30,9 +30,9 @@ type PerfMonitor interface {
 }
 
 type perfmonitor struct {
-	Sum      int64   //sum of the per request cost
+	Sum      float64 //Sum of the per request cost
 	Stdev    float64 //Standard Deviation
-	Avg      int64   //Average
+	Mean     float64 //Mean about distribution
 	Total    int64   //total request by count
 	duration int     //test total time
 	number   int     //total test request
@@ -202,7 +202,7 @@ func (p *perfmonitor) Wait() {
 	for i = 0; i < p.Total; i++ {
 		d = <-p.buffer
 		p.histogram.Add(float64(d))
-		p.Sum += d
+		p.Sum += float64(d)
 		sum2 += d * d
 		if d > max {
 			max = d
@@ -212,8 +212,8 @@ func (p *perfmonitor) Wait() {
 		}
 	}
 
-	p.Avg = p.Sum / p.Total
-	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Avg*p.Sum) + float64(p.Total*p.Avg*p.Avg)) / float64(p.Total))
+	p.Mean = p.histogram.(*hist.NumericHistogram).Mean()
+	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) + float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
 
 	// here show the histogram
 	if !p.noPrint {
@@ -221,7 +221,7 @@ func (p *perfmonitor) Wait() {
 		if p.errCount != 0 {
 			fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount/p.Total*100))
 		}
-		fmt.Printf("MAX: %.3vms MIN: %.3vms AVG: %.3vms STDEV: %.3fms CV: %.3f%% ", max/1000000, min/1000000, p.Avg/1000000, p.Stdev/1000000, p.Stdev/float64(p.Avg)*100)
+		fmt.Printf("MAX: %.3vms MIN: %.3vms MEAN: %.3vms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
 		fmt.Println(p.histogram)
 	}
 }
