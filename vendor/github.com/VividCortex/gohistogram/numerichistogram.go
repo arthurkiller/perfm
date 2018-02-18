@@ -153,7 +153,7 @@ func (h *NumericHistogram) String() (str string) {
 		for j := 0; j < int(float64(h.bins[i].count)/float64(h.total)*200); j++ {
 			bar += "."
 		}
-		str += fmt.Sprintf("%.3fms \t\t %v\n", h.bins[i].value/1000000, bar)
+		str += fmt.Sprintf("%.3fms\t Count:%v\t %v\n", h.bins[i].value/1000000, h.bins[i].count, bar)
 	}
 
 	return
