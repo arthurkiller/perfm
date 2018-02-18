@@ -30,7 +30,7 @@ func (j *job) After() {
 }
 
 func main() {
-	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(1), perfm.WithNumber(20))
+	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
 
 	j := &job{}
 	j.url = "http://www.baidu.com"
