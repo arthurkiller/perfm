@@ -7,7 +7,7 @@ import (
 )
 
 type job struct {
-	// job data here
+	// job private data
 	url string
 }
 

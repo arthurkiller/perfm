@@ -9,13 +9,38 @@ a golang performence testing platform
 
 ## demo client
 ```go
-	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
-	j := &job{}
-	j.url = "http://www.baidu.com"
-	perfm.Regist(j)
+type job struct {
+	// job private data
+	url string
+}
 
-	perfm.Start()
-	perfm.Wait()
+// Copy will called in parallel
+func (j *job) Copy() perfm.Job {
+	jc := *j
+	return &jc
+}
+
+func (j *job) Pre() {
+	// do pre job
+}
+func (j *job) Do() error {
+	// do benchmark job
+	_, err := http.Get(j.url)
+	return err
+}
+func (j *job) After() {
+	// do clean job
+}
+
+// start perfm
+
+perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
+j := &job{}
+j.url = "http://www.baidu.com"
+perfm.Regist(j)
+
+perfm.Start()
+perfm.Wait()
 
 ```
 ![test demo](./demo/screen.png)

@@ -197,10 +197,10 @@ func (p *perfmonitor) Start() {
 // Wait for the benchmark task done and caculate the result
 func (p *perfmonitor) Wait() {
 	p.wg.Wait()
-	var sum2, i, d, max, min int64
+	var sum2, i, d, max, min float64
 	min = 0x7fffffffffffffff
-	for i = 0; i < p.Total; i++ {
-		d = <-p.buffer
+	for i = 0; int64(i) < p.Total; i++ {
+		d = float64(<-p.buffer)
 		p.histogram.Add(float64(d))
 		p.Sum += float64(d)
 		sum2 += d * d
