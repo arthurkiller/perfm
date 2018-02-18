@@ -9,11 +9,11 @@ a golang performence testing platform
 
 ## demo client
 ```go
-	perfm := perfm.New(perfm.WithParallel(5))
-	perfm.Registe(func() error {
-		_, err := http.Get("http://www.baidu.com")
-		return err
-	})
+	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
+	j := &job{}
+	j.url = "http://www.baidu.com"
+	perfm.Regist(j)
+
 	perfm.Start()
 	perfm.Wait()
 
