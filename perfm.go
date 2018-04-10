@@ -11,22 +11,29 @@ import (
 )
 
 // Job give out a job for parallel call
+// 1. start workers
+// 		1. workers call job.Copy()
+// 		2. for-loop do
+// 			* job.Pre()
+// 			* job.Do()
+// 		3. after for-loop call job.After()
+// 2. caculate the summary
 type Job interface {
 	// Copy will copy a job for parallel call
-	Copy() Job
+	Copy() (Job, error)
 	// Pre will called before do
-	Pre()
+	Pre() error
 	// Do contains the core job here
 	Do() error
-	// After contains the clean job after Do called
+	// After contains the clean job after job done
 	After()
 }
 
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
-	Regist(job Job) //regist the job to monitor
-	Start()         //start the perf monitor
-	Wait()          //wait for the benchmark done
+	Regist(Job) //regist the job to monitor
+	Start()     //start the perf monitor
+	Wait()      //wait for the benchmark done
 }
 
 type perfmonitor struct {
@@ -77,16 +84,13 @@ func New(options ...Options) PerfMonitor {
 }
 
 // Regist a job into perfmonitor fro benchmark
-func (p *perfmonitor) Regist(job Job) {
-	p.job = job
-}
+func (p *perfmonitor) Regist(job Job) { p.job = job }
 
 // Start the benchmark with given arguments on regisit
 func (p *perfmonitor) Start() {
 	if p.job == nil {
-		panic("error job does not regist correctly")
+		panic("error job does not registed yet")
 	}
-
 	var localwg sync.WaitGroup
 
 	p.wg.Add(1)
@@ -129,22 +133,29 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
-				job := p.job.Copy()
 				var err error
+				job, err := p.job.Copy()
+				if err != nil {
+					fmt.Println("error in do copy", err)
+					return
+				}
+				defer job.After()
 				var start time.Time
 				for {
 					select {
 					case <-p.done:
 						return
 					default:
-						job.Pre()
+						if err = job.Pre(); err != nil {
+							fmt.Println("error in do pre job", err)
+							return
+						}
 						start = time.Now()
 						err = job.Do()
 						p.collector <- time.Since(start)
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
-						job.After()
 						if atomic.AddInt64(&p.Total, 1) == sum {
 							// check if the request reach the goal
 							close(p.done)
@@ -161,20 +172,27 @@ func (p *perfmonitor) Start() {
 			localwg.Add(1)
 			go func() {
 				defer localwg.Done()
-				job := p.job.Copy()
 				var err error
+				job, err := p.job.Copy()
+				if err != nil {
+					fmt.Println("error in do copy", err)
+					return
+				}
+				defer job.After()
 				var start time.Time
 				for {
 					select {
 					case <-p.done:
 						return
 					default:
-						job.Pre()
+						if err = job.Pre(); err != nil {
+							fmt.Println("error in do pre job", err)
+							return
+						}
 						start = time.Now()
 						err = job.Do()
 						p.collector <- time.Since(start)
 						atomic.AddInt64(&p.Total, 1)
-						job.After()
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}

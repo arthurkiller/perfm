@@ -12,13 +12,14 @@ type job struct {
 }
 
 // Copy will called in parallel
-func (j *job) Copy() perfm.Job {
+func (j *job) Copy() (perfm.Job, error) {
 	jc := *j
-	return &jc
+	return &jc, nil
 }
 
-func (j *job) Pre() {
+func (j *job) Pre() error {
 	// do pre job
+	return nil
 }
 func (j *job) Do() error {
 	// do benchmark job
