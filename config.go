@@ -2,16 +2,16 @@ package perfm
 
 //Config define the Config about perfm
 type Config struct {
-	Duration       int     // set for benchmark time in second
-	Parallel       int     // test parallel worker numbers
-	Number         int     // test total request
-	NoPrint        bool    // diasble print
-	Frequency      int     // set for the sampling frequency
-	BufferSize     int     // set for the global time channel buffer size
-	BinsNumber     int     // set the histogram bins number
-	GrowthFactor   float64 // GrowthFactor is the growth factor of the buckets.
-	MinValue       int64   // MinValue is the lower bound of the first bucket.
-	BaseBucketSize float64 // BaseBucketSize is the size of the first bucket.
+	Duration       int     `json:"duration"`         // set for benchmark time in second
+	Parallel       int     `json:"parallel"`         // test parallel worker numbers
+	Number         int     `json:"number"`           // test total request
+	NoPrint        bool    `json:"no_print"`         // diasble print
+	Frequency      int     `json:"frequency"`        // set for the sampling frequency
+	BufferSize     int     `json:"buffer_size"`      // set for the global time channel buffer size
+	BinsNumber     int     `json:"bins_number"`      // set the histogram bins number
+	GrowthFactor   float64 `json:"growth_factor"`    // GrowthFactor is the growth factor of the buckets.
+	MinValue       int64   `json:"min_value"`        // MinValue is the lower bound of the first bucket.
+	BaseBucketSize float64 `json:"base_bucket_size"` // BaseBucketSize is the size of the first bucket.
 	// A value of 0.1 indicates that bucket N+1 will be 10% larger than bucket N.
 }
 

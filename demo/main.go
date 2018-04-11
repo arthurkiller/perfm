@@ -33,11 +33,9 @@ func (j *job) After() {
 func main() {
 	perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
 
-	j := &job{}
-	j.url = "http://www.baidu.com"
+	j := &job{url: "http://www.baidu.com"}
 
 	perfm.Regist(j)
-
 	perfm.Start()
 	perfm.Wait()
 }

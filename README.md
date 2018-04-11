@@ -5,7 +5,6 @@ a golang performence testing platform
 * v1.0 is comming out
 * reconstruct the project for easy use
 * remove the divided operation for bench and caculate
-* only 4 line of code can create a benchmarker, wow
 
 ## demo client
 ```go
@@ -15,13 +14,14 @@ type job struct {
 }
 
 // Copy will called in parallel
-func (j *job) Copy() perfm.Job {
+func (j *job) Copy() (perfm.Job,error) {
 	jc := *j
-	return &jc
+	return &jc, nil
 }
 
-func (j *job) Pre() {
+func (j *job) Pre() error {
 	// do pre job
+    return nil
 }
 func (j *job) Do() error {
 	// do benchmark job
