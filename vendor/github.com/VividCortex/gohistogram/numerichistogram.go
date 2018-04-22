@@ -147,14 +147,15 @@ func (h *NumericHistogram) trim() {
 // which is useful for printing to a terminal.
 func (h *NumericHistogram) String() (str string) {
 	str += fmt.Sprintln("Total:", h.total)
-
+	var cum float64
 	for i := range h.bins {
+		cum += h.bins[i].count
 		var bar string
-		for j := 0; j < int(float64(h.bins[i].count)/float64(h.total)*200); j++ {
-			bar += "."
+		for j := 0; j < int(float64(h.bins[i].count)/float64(h.total)*100); j++ {
+			bar += "█"
 		}
-		str += fmt.Sprintf("%.3fms\t Count:%v\t %v\n", h.bins[i].value/1000000, h.bins[i].count, bar)
+		str += fmt.Sprintf("%.3fms\t Count:%.0f[%v %.1f%%]\t %v\n", h.bins[i].value/1000000,
+			h.bins[i].count, cum, (float64(cum)/float64(h.total))*100, bar)
 	}
-
 	return
 }

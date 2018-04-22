@@ -3,6 +3,7 @@ package perfm
 import (
 	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,6 +71,14 @@ func (p *perfmonitor) Regist(job Job) {
 	p.buffer = make(chan int64, 100000000)
 	p.wg = sync.WaitGroup{}
 	p.job = job
+
+	p.Sum = 0
+	p.Stdev = 0
+	p.Mean = 0
+	p.Total = 0
+	p.errCount = 0
+	p.localCount = 0
+	p.localTimeCount = 0
 }
 
 // Start the benchmark with given arguments on regisit
@@ -93,7 +102,9 @@ func (p *perfmonitor) Start() {
 				if p.localCount == 0 {
 					continue
 				}
-				fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+				if !p.NoPrint {
+					fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+				}
 				p.localCount = 0
 				p.localTimeCount = 0
 			case <-p.done:
@@ -104,7 +115,9 @@ func (p *perfmonitor) Start() {
 					p.localTimeCount += cost
 					p.buffer <- int64(cost)
 				}
-				fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+				if !p.NoPrint {
+					fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+				}
 
 				p.wg.Done()
 				return
@@ -127,6 +140,7 @@ func (p *perfmonitor) Start() {
 				}
 				defer job.After()
 				var start time.Time
+				var s int64
 				for {
 					select {
 					case <-p.done:
@@ -142,7 +156,8 @@ func (p *perfmonitor) Start() {
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
-						if atomic.AddInt64(&p.Total, 1) == sum {
+						s = atomic.AddInt64(&p.Total, 1)
+						if s == sum {
 							// check if the request reach the goal
 							close(p.done)
 							return
@@ -178,10 +193,10 @@ func (p *perfmonitor) Start() {
 						start = time.Now()
 						err = job.Do()
 						p.collector <- time.Since(start)
-						atomic.AddInt64(&p.Total, 1)
 						if err != nil {
 							atomic.AddInt64(&p.errCount, 1)
 						}
+						atomic.AddInt64(&p.Total, 1)
 					}
 				}
 			}()
@@ -201,31 +216,37 @@ func (p *perfmonitor) Start() {
 // Wait for the benchmark task done and caculate the result
 func (p *perfmonitor) Wait() {
 	p.wg.Wait()
-	var sum2, i, d, max, min float64
+	var sum2, d, max, min, p70, p80, p90, p95 float64
+	sortSlice := make([]float64, p.Total)
 	min = 0x7fffffffffffffff
-	for i = 0; int64(i) < p.Total; i++ {
+	for i := int64(0); i < p.Total; i++ {
 		d = float64(<-p.buffer)
+		sortSlice[i] = d
 		p.histogram.Add(float64(d))
 		p.Sum += float64(d)
 		sum2 += d * d
-		if d > max {
-			max = d
-		}
-		if d < min {
-			min = d
-		}
 	}
+	sort.Slice(sortSlice, func(i, j int) bool { return sortSlice[i] < sortSlice[j] })
+	p70 = sortSlice[int(float64(p.Total)*0.7)] / 1000000
+	p80 = sortSlice[int(float64(p.Total)*0.8)] / 1000000
+	p90 = sortSlice[int(float64(p.Total)*0.9)] / 1000000
+	p95 = sortSlice[int(float64(p.Total)*0.95)] / 1000000
+	min = sortSlice[0]
+	max = sortSlice[p.Total-1]
 
 	p.Mean = p.histogram.(*hist.NumericHistogram).Mean()
 	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) + float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
 
-	// here show the histogram
-	if !p.NoPrint {
-		fmt.Println("\n===============================================")
-		if p.errCount != 0 {
-			fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount/p.Total*100))
-		}
-		fmt.Printf("MAX: %.3vms MIN: %.3vms MEAN: %.3vms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
-		fmt.Println(p.histogram)
+	// If job implement descripetion as Stringer
+	if _, ok := p.job.(fmt.Stringer); ok {
+		fmt.Println(p.job)
 	}
+	fmt.Println("\n===============================================")
+	// here show the histogram
+	if p.errCount != 0 {
+		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount/p.Total*100))
+	}
+	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
+	fmt.Println(p.histogram)
+	fmt.Printf("Summery: 70%% in: %.3fms 80%% in: %.3fms 90%% in: %.3fms 95%% in: %.3fms\n", p70, p80, p90, p95)
 }
