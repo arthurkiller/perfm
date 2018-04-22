@@ -154,7 +154,7 @@ func (h *NumericHistogram) String() (str string) {
 		for j := 0; j < int(float64(h.bins[i].count)/float64(h.total)*100); j++ {
 			bar += "█"
 		}
-		str += fmt.Sprintf("%.3fms\t Count:%.0f[%v %.1f%%]\t %v\n", h.bins[i].value/1000000,
+		str += fmt.Sprintf("%.3fms\t Count:%.0f[%v %.1f%%]\t %-v\n", h.bins[i].value/1000000,
 			h.bins[i].count, cum, (float64(cum)/float64(h.total))*100, bar)
 	}
 	return
