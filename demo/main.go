@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/arthurkiller/perfm"
@@ -9,6 +10,10 @@ import (
 type job struct {
 	// job private data
 	url string
+}
+
+func (j *job) String() string {
+	return fmt.Sprintf("demo job: send GET to %s", j.url)
 }
 
 // Copy will called in parallel

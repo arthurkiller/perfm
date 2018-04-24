@@ -88,6 +88,12 @@ func (p *perfmonitor) Start() {
 	}
 	var localwg sync.WaitGroup
 
+	// If job implement descripetion as Stringer
+	if _, ok := p.job.(fmt.Stringer); ok {
+		fmt.Println(p.job)
+	}
+	fmt.Println("===============================================")
+
 	p.wg.Add(1)
 	go func() {
 		p.startTime = time.Now()
@@ -237,10 +243,6 @@ func (p *perfmonitor) Wait() {
 	p.Mean = p.histogram.(*hist.NumericHistogram).Mean()
 	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) + float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
 
-	// If job implement descripetion as Stringer
-	if _, ok := p.job.(fmt.Stringer); ok {
-		fmt.Println(p.job)
-	}
 	fmt.Println("\n===============================================")
 	// here show the histogram
 	if p.errCount != 0 {
@@ -248,5 +250,6 @@ func (p *perfmonitor) Wait() {
 	}
 	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
 	fmt.Println(p.histogram)
-	fmt.Printf("Summery: 70%% in: %.3fms 80%% in: %.3fms 90%% in: %.3fms 95%% in: %.3fms\n", p70, p80, p90, p95)
+	fmt.Println("===============================================")
+	fmt.Printf("Summary:\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n", p70, p80, p90, p95)
 }
