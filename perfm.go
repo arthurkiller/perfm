@@ -57,7 +57,7 @@ type perfmonitor struct {
 
 	//job implement benchmark job
 	//error occoured in job.Do will be collected
-	job Job `json:"job"`
+	job Job
 }
 
 func New(options ...Options) PerfMonitor { return &perfmonitor{Config: newConfig(options...)} }
