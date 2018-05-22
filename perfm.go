@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	hist "github.com/VividCortex/gohistogram"
+	hist "github.com/arthurkiller/perfm/histogram"
 )
 
 // Job give out a job for parallel call
