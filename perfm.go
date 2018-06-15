@@ -246,7 +246,7 @@ func (p *perfmonitor) Wait() {
 	fmt.Println("\n===============================================")
 	// here show the histogram
 	if p.errCount != 0 {
-		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount/p.Total*100))
+		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount*100)/float64(p.Total))
 	}
 	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
 	fmt.Println(p.histogram)
