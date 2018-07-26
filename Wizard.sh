@@ -2,9 +2,9 @@
 
 filename="job.go"
 
-if [ -e "job.go" ]; then{
+if [ -e "job.go" ]; then
     filename="job_d.go"
-}
+fi
 
 echo 'package main
 
@@ -50,4 +50,4 @@ j := job{}
 p.Regist(&j)
 p.Start()
 p.Wait()
-}' >> $(filename)
+}' >> $filename

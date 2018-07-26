@@ -109,7 +109,8 @@ func (p *perfmonitor) Start() {
 					continue
 				}
 				if !p.NoPrint {
-					fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+					fmt.Printf("%s \t  Qps: %d \t  Avg Latency: %.3fms\n", time.Now().Format("15:04:05.000"),
+						p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
 				}
 				p.localCount = 0
 				p.localTimeCount = 0
@@ -122,9 +123,10 @@ func (p *perfmonitor) Start() {
 					p.buffer <- int64(cost)
 				}
 				if !p.NoPrint {
-					fmt.Printf("Qps: %d \t  Avg Latency: %.3fms\n", p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
+					fmt.Printf("%s \t  Qps: %d \t  Avg Latency: %.3fms\n", time.Now().Format("15:04:05.000"),
+						p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
 				}
-
+				close(p.buffer)
 				p.wg.Done()
 				return
 			}
@@ -146,28 +148,24 @@ func (p *perfmonitor) Start() {
 				}
 				defer job.After()
 				var start time.Time
-				var s int64
+				var l int64
 				for {
-					select {
-					case <-p.done:
-						return
-					default:
-						if err = job.Pre(); err != nil {
-							fmt.Println("error in do pre job", err)
-							return
-						}
-						start = time.Now()
-						err = job.Do()
-						p.collector <- time.Since(start)
-						if err != nil {
-							atomic.AddInt64(&p.errCount, 1)
-						}
-						s = atomic.AddInt64(&p.Total, 1)
-						if s == sum {
-							// check if the request reach the goal
+					if l = atomic.AddInt64(&p.Total, 1); l > sum {
+						if l == sum+1 {
 							close(p.done)
-							return
 						}
+						// check if the request reach the goal
+						return
+					}
+					if err = job.Pre(); err != nil {
+						fmt.Println("error in do pre job", err)
+						return
+					}
+					start = time.Now()
+					err = job.Do()
+					p.collector <- time.Since(start)
+					if err != nil {
+						atomic.AddInt64(&p.errCount, 1)
 					}
 				}
 			}()
@@ -175,6 +173,7 @@ func (p *perfmonitor) Start() {
 	} else {
 		// in test duration module
 		// start all the worker and do job till cancelled
+		starter := make(chan struct{})
 		for i := 0; i < p.Parallel; i++ {
 			localwg.Add(1)
 			go func() {
@@ -187,6 +186,7 @@ func (p *perfmonitor) Start() {
 				}
 				defer job.After()
 				var start time.Time
+				<-starter
 				for {
 					select {
 					case <-p.done:
@@ -212,6 +212,7 @@ func (p *perfmonitor) Start() {
 		go func() {
 			// stoper to cancell all the workers
 			p.wg.Done()
+			close(starter)
 			time.Sleep(time.Second * time.Duration(p.Duration))
 			close(p.done)
 			return
@@ -221,16 +222,18 @@ func (p *perfmonitor) Start() {
 
 // Wait for the benchmark task done and caculate the result
 func (p *perfmonitor) Wait() {
-	p.wg.Wait()
-	var sum2, d, max, min, p70, p80, p90, p95 float64
-	sortSlice := make([]float64, p.Total)
+	var sum2, max, min, p70, p80, p90, p95 float64
 	min = 0x7fffffffffffffff
-	for i := int64(0); i < p.Total; i++ {
-		d = float64(<-p.buffer)
-		sortSlice[i] = d
+	p.wg.Wait()
+	p.Total--
+	sortSlice := make([]float64, p.Total)
+	i := 0
+	for d := range p.buffer {
+		sortSlice[i] = float64(d)
 		p.histogram.Add(float64(d))
 		p.Sum += float64(d)
-		sum2 += d * d
+		sum2 += float64(d * d)
+		i++
 	}
 	sort.Slice(sortSlice, func(i, j int) bool { return sortSlice[i] < sortSlice[j] })
 	p70 = sortSlice[int(float64(p.Total)*0.7)] / 1000000
