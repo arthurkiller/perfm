@@ -10,6 +10,7 @@ package main
 
 import (
     "flag"
+	"os"
     
     "github.com/arthurkiller/perfm"
 )
@@ -50,6 +51,11 @@ func main() {
     count := flag.Int("c", 0, "number of total tests times")
     duration := flag.Int("d", 10, "number of total tests times")
     bin := flag.Int("bin", 15, "number of histogram bins")
+	flag.Parse()
+	if !flag.Parsed() {
+		flag.Usage()
+		os.Exit(0)
+	}
     
     var p perfm.PerfMonitor
     if *count == 0 {
