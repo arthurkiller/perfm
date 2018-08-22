@@ -226,14 +226,12 @@ func (p *perfmonitor) Wait() {
 	min = 0x7fffffffffffffff
 	p.wg.Wait()
 	p.Total--
-	sortSlice := make([]float64, p.Total)
-	i := 0
+	sortSlice := make([]float64, 0, len(p.buffer))
 	for d := range p.buffer {
-		sortSlice[i] = float64(d)
+		sortSlice = append(sortSlice, float64(d))
 		p.histogram.Add(float64(d))
 		p.Sum += float64(d)
 		sum2 += float64(d * d)
-		i++
 	}
 	sort.Slice(sortSlice, func(i, j int) bool { return sortSlice[i] < sortSlice[j] })
 	p70 = sortSlice[int(float64(p.Total)*0.7)] / 1000000
