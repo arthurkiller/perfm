@@ -22,6 +22,8 @@ job.After()
 
 
 * perfm jobs work on different goroutine
+
+```bash
         __job.Copy()__
 +---------+ +---------+ +---------+
 |   job   | |   job   | |   job   |
@@ -32,7 +34,8 @@ job.After()
 |}        | |}        | |}        |
 | after() | | after() | | after() |
 +---------+ +---------+ +---------+
-
+```
+t 
 ## Short Example
 You can start with `Wizard.sh` creating your job templates.
 
