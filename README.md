@@ -37,8 +37,16 @@ job.After()
 | after() | | after() | | after() |
 +---------+ +---------+ +---------+
 ```
-t 
+
+
 ## Short Example
+
+___3 steps to start your benchmark!___
+
+1. create you perfm.Job
+2. init the job and `regist` to perfm
+3. call perfm.Start()
+
 You can start with `Wizard.sh` creating your job templates.
 
 ```go
@@ -71,9 +79,7 @@ perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDu
 j := &job{}
 j.url = "http://www.baidu.com"
 perfm.Regist(j)
-
 perfm.Start()
-perfm.Wait()
 ```
 
 ![test demo](./demo/screen.png)

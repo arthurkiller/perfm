@@ -34,7 +34,16 @@ type Job interface {
 type PerfMonitor interface {
 	Regist(Job) //regist the job to perfm
 	Start()     //start the perf monitor
-	Wait()      //wait for the benchmark done
+}
+
+// Regist the job to perfm
+func Regist(j Job) {
+	p.Regist(j)
+}
+
+// Start the perf monitor
+func Start() {
+	p.Start()
 }
 
 type perfmonitor struct {
@@ -218,10 +227,7 @@ func (p *perfmonitor) Start() {
 			return
 		}()
 	}
-}
 
-// Wait for the benchmark task done and caculate the result
-func (p *perfmonitor) Wait() {
 	var sum2, max, min, p70, p80, p90, p95 float64
 	min = 0x7fffffffffffffff
 	p.wg.Wait()

@@ -36,15 +36,14 @@ func (j *job) After() {
 }
 
 func main() {
-	p := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5))
-
+	// start it directly!
 	j := &job{url: "http://www.baidu.com"}
-	p.Regist(j)
-	p.Start()
-	p.Wait()
+	perfm.Regist(j)
+	perfm.Start()
 
-	jj := perfm.NewHTTPJob("http://www.baidu.com", "GET", "advertise", nil)
-	p.Regist(jj)
+	// or control it yourself!
+	p := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5))
+	j2 := perfm.NewHTTPJob("http://www.baidu.com", "GET", "advertise", nil)
+	p.Regist(j2)
 	p.Start()
-	p.Wait()
 }
