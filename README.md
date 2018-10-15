@@ -24,7 +24,9 @@ job.After()
 * perfm jobs work on different goroutine
 
 ```bash
-        __job.Copy()__
+    for parallels {
+        job.Copy()
+    }
 +---------+ +---------+ +---------+
 |   job   | |   job   | |   job   |
 |         | |         | |         |
