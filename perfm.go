@@ -76,14 +76,14 @@ func (p *perfmonitor) Regist(job Job) {
 	p.timer = time.Tick(time.Second * time.Duration(p.Frequency))
 	p.collector = make(chan time.Duration, p.BufferSize)
 	p.histogram = hist.NewHistogram(p.BinsNumber)
-	p.done = make(chan int, 0)
 	p.buffer = make(chan int64, 100000000)
+	p.done = make(chan int, 0)
 	p.wg = sync.WaitGroup{}
 	p.job = job
 
 	p.Sum = 0
-	p.Stdev = 0
 	p.Mean = 0
+	p.Stdev = 0
 	p.Total = 0
 	p.errCount = 0
 	p.localCount = 0
@@ -159,11 +159,11 @@ func (p *perfmonitor) Start() {
 				var start time.Time
 				var l int64
 				for {
+					// check if the request reach the goal
 					if l = atomic.AddInt64(&p.Total, 1); l > sum {
-						if l == sum+1 {
+						if l == sum+1 { // make sure only close once
 							close(p.done)
 						}
-						// check if the request reach the goal
 						return
 					}
 					if err = job.Pre(); err != nil {
@@ -228,35 +228,40 @@ func (p *perfmonitor) Start() {
 		}()
 	}
 
+	// wait job done and do summarize
+	p.wg.Wait()
 	var sum2, max, min, p70, p80, p90, p95 float64
 	min = 0x7fffffffffffffff
-	p.wg.Wait()
 	p.Total--
-	sortSlice := make([]float64, 0, len(p.buffer))
+	sortedSlice := make([]float64, 0, len(p.buffer))
 	for d := range p.buffer {
-		sortSlice = append(sortSlice, float64(d))
+		sortedSlice = append(sortedSlice, float64(d))
 		p.histogram.Add(float64(d))
 		p.Sum += float64(d)
 		sum2 += float64(d * d)
 	}
-	sort.Slice(sortSlice, func(i, j int) bool { return sortSlice[i] < sortSlice[j] })
-	p70 = sortSlice[int(float64(p.Total)*0.7)] / 1000000
-	p80 = sortSlice[int(float64(p.Total)*0.8)] / 1000000
-	p90 = sortSlice[int(float64(p.Total)*0.9)] / 1000000
-	p95 = sortSlice[int(float64(p.Total)*0.95)] / 1000000
-	min = sortSlice[0]
-	max = sortSlice[p.Total-1]
+	sort.Slice(sortedSlice, func(i, j int) bool { return sortedSlice[i] < sortedSlice[j] })
+	p70 = sortedSlice[int(float64(p.Total)*0.7)] / 1000000
+	p80 = sortedSlice[int(float64(p.Total)*0.8)] / 1000000
+	p90 = sortedSlice[int(float64(p.Total)*0.9)] / 1000000
+	p95 = sortedSlice[int(float64(p.Total)*0.95)] / 1000000
+	min = sortedSlice[0]
+	max = sortedSlice[p.Total-1]
 
 	p.Mean = p.histogram.(*hist.NumericHistogram).Mean()
-	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) + float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
+	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) +
+		float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
 
 	fmt.Println("\n===============================================")
 	// here show the histogram
 	if p.errCount != 0 {
-		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount, float64(p.errCount*100)/float64(p.Total))
+		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount,
+			float64(p.errCount*100)/float64(p.Total))
 	}
-	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000, min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
+	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000,
+		min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
 	fmt.Println(p.histogram)
 	fmt.Println("===============================================")
-	fmt.Printf("Summary:\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n", p70, p80, p90, p95)
+	fmt.Printf("Summary:\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n",
+		p70, p80, p90, p95)
 }
