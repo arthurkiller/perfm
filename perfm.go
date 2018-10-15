@@ -93,7 +93,7 @@ func (p *perfmonitor) Regist(job Job) {
 // Start the benchmark with given arguments on regisit
 func (p *perfmonitor) Start() {
 	if p.job == nil {
-		panic("error job does not registed yet")
+		panic("error job does not registered yet")
 	}
 	var localwg sync.WaitGroup
 
@@ -231,7 +231,7 @@ func (p *perfmonitor) Start() {
 	// wait job done and do summarize
 	p.wg.Wait()
 	var sum2, max, min, p70, p80, p90, p95 float64
-	min = 0x7fffffffffffffff
+	min = math.MaxFloat64
 	p.Total--
 	sortedSlice := make([]float64, 0, len(p.buffer))
 	for d := range p.buffer {

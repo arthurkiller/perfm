@@ -5,7 +5,7 @@ type Config struct {
 	Duration       int     `json:"duration"`         // set for benchmark time in second
 	Parallel       int     `json:"parallel"`         // test parallel worker numbers
 	Number         int     `json:"number"`           // test total request
-	NoPrint        bool    `json:"no_print"`         // diasble print
+	NoPrint        bool    `json:"no_print"`         // disable print
 	Frequency      int     `json:"frequency"`        // set for the sampling frequency
 	BufferSize     int     `json:"buffer_size"`      // set for the global time channel buffer size
 	BinsNumber     int     `json:"bins_number"`      // set the histogram bins number
