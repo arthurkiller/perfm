@@ -43,7 +43,6 @@ func main() {
 
 	// or control it yourself!
 	p := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5))
-	j2 := perfm.NewHTTPJob("http://www.baidu.com", "GET", "advertise", nil)
-	p.Regist(j2)
+	p.Regist(j)
 	p.Start()
 }
