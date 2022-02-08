@@ -2,10 +2,8 @@ package perfm
 
 import (
 	"fmt"
-	"math"
-	"sort"
+	"io"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	hist "github.com/arthurkiller/perfm/histogram"
@@ -32,236 +30,209 @@ type Job interface {
 
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
-	Regist(Job) //regist the job to perfm
-	Start()     //start the perf monitor
+	Reset(Job) //regist the job to perfm
+	Start()    //start the perf monitor
 }
 
-// Regist the job to perfm
-func Regist(j Job) {
-	p.Regist(j)
+// New perfmonitor
+func New(options ...Options) PerfMonitor {
+	config := NewConfig(options...)
+	return NewMonitor(config)
 }
 
-// Start the perf monitor
-func Start() {
-	p.Start()
-}
+// BUFFERLEN set for duration channel length
+const BUFFERLEN = 0x7FFFF
 
-type perfmonitor struct {
+// Collector collect all perfm config and do the statistic
+type Collector struct {
 	Sum   float64 //Sum of the per request cost
 	Stdev float64 //Standard Deviation
 	Mean  float64 //Mean about distribution
 	Total int64   //total request by count
 
-	Config                            //configration for perfm
-	done           chan int           //stop the perfm
-	startTime      time.Time          //keep the start time
-	timer          <-chan time.Time   //the frequency sampling timer
-	collector      chan time.Duration //get the request cost from every done()
-	errCount       int64              //error counter count error request
-	localCount     int                //count for the number in the sampling times
-	localTimeCount time.Duration      //count for the sampling time total costs
-	buffer         chan int64         //buffer the test time for latter add to the historgam
-	histogram      hist.Histogram     //used to print the histogram
-	wg             sync.WaitGroup     //wait group to block the stop and sync the work thread
+	conf          *Config
+	wg            sync.WaitGroup
+	durationCache chan int64             // duration cache buffer, wait for operation
+	histogram     *hist.NumericHistogram // used to print the histogram
+	done          chan struct{}          // close channel
 
-	//job implement benchmark job
-	//error occoured in job.Do will be collected
-	job Job
+	localtimer     <-chan time.Time // print timer
+	localCount     int64            // count for the number in the sampling times
+	localTimeCount int64            // count for the sampling time total costs
 }
 
-func New(options ...Options) PerfMonitor { return &perfmonitor{Config: newConfig(options...)} }
+//Config define the Config about perfm
+type Config struct {
+	// manager config
+	Duration  int   `json:"duration"`  // benchmark duration in second
+	Number    int64 `json:"number"`    // total requests
+	Parallel  int   `json:"parallel"`  // parallel worker numbers
+	NoPrint   bool  `json:"no_print"`  // disable statistic print
+	Frequency int   `json:"frequency"` // sampling frequency, control the precision
 
-// Regist a job into perfmonitor fro benchmark
-func (p *perfmonitor) Regist(job Job) {
-	p.timer = time.Tick(time.Second * time.Duration(p.Frequency))
-	p.collector = make(chan time.Duration, p.BufferSize)
-	p.histogram = hist.NewHistogram(p.BinsNumber)
-	p.buffer = make(chan int64, 100000000)
-	p.done = make(chan int, 0)
-	p.wg = sync.WaitGroup{}
-	p.job = job
+	// collector config
+	BinsNumber int `json:"bins_number"` // set the histogram bins number
 
-	p.Sum = 0
-	p.Mean = 0
-	p.Stdev = 0
-	p.Total = 0
-	p.errCount = 0
-	p.localCount = 0
-	p.localTimeCount = 0
+	// XXX
+	//GrowthFactor   float64 `json:"growth_factor"`    // GrowthFactor is the growth factor of the buckets.
+	//MinValue       int64   `json:"min_value"`        // MinValue is the lower bound of the first bucket.
+	//BaseBucketSize float64 `json:"base_bucket_size"` // BaseBucketSize is the size of the first bucket.
+	//BufferSize     int     `json:"buffer_size"`      // set for the global time channel buffer size
+	// A value of 0.1 indicates that bucket N+1 will be 10% larger than bucket N.
 }
 
-// Start the benchmark with given arguments on regisit
-func (p *perfmonitor) Start() {
-	if p.job == nil {
-		panic("error job does not registered yet")
+//NewConfig gen the config
+func NewConfig(options ...Options) Config {
+	c := Config{
+		Duration:   10,
+		Number:     0,
+		Parallel:   4,
+		NoPrint:    false,
+		Frequency:  1,
+		BinsNumber: 15,
+		//GrowthFactor:   1.4,
+		//MinValue:       1000000,
+		//BaseBucketSize: 1000000,
 	}
-	var localwg sync.WaitGroup
-
-	// If job implement descripetion as Stringer
-	if _, ok := p.job.(fmt.Stringer); ok {
-		fmt.Println(p.job)
+	for _, o := range options {
+		o(&c)
 	}
-	fmt.Println("===============================================")
+	return c
+}
 
-	p.wg.Add(1)
-	go func() {
-		p.startTime = time.Now()
-		var cost time.Duration
-		for {
-			select {
-			case cost = <-p.collector:
-				p.localCount++
-				p.localTimeCount += cost
-				p.buffer <- int64(cost)
-			case <-p.timer:
-				if p.localCount == 0 {
-					continue
-				}
-				if !p.NoPrint {
-					fmt.Printf("%s \t  Qps: %d \t  Avg Latency: %.3fms\n", time.Now().Format("15:04:05.000"),
-						p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
-				}
-				p.localCount = 0
-				p.localTimeCount = 0
-			case <-p.done:
-				localwg.Wait()
-				close(p.collector)
-				for cost := range p.collector {
-					p.localCount++
-					p.localTimeCount += cost
-					p.buffer <- int64(cost)
-				}
-				if !p.NoPrint {
-					fmt.Printf("%s \t  Qps: %d \t  Avg Latency: %.3fms\n", time.Now().Format("15:04:05.000"),
-						p.localCount, float64(p.localTimeCount.Nanoseconds()/int64(p.localCount))/1000000)
-				}
-				close(p.buffer)
-				p.wg.Done()
-				return
+//Options define the options of congif
+type Options func(*Config)
+
+//WithParallel set the workers
+func WithParallel(i int) Options {
+	return func(o *Config) {
+		o.Parallel = i
+	}
+}
+
+//WithDuration set the test running duration
+func WithDuration(i int) Options {
+	return func(o *Config) {
+		o.Duration = i
+	}
+}
+
+//WithNumber set the total benchmark request
+func WithNumber(i int64) Options {
+	return func(o *Config) {
+		o.Number = i
+	}
+}
+
+//WithFrequency set the frequency
+func WithFrequency(i int) Options {
+	return func(o *Config) {
+		o.Frequency = i
+	}
+}
+
+//WithBinsNumber set the bins number of config
+func WithBinsNumber(i int) Options {
+	return func(o *Config) {
+		o.BinsNumber = i
+	}
+}
+
+//WithNoPrint will disable output during benchmarking
+func WithNoPrint() Options {
+	return func(o *Config) {
+		o.NoPrint = true
+	}
+}
+
+// NewCollector create collector
+// 1. create collector
+// 2. run the goroutine monitor for duration
+// 3. do the collection
+func NewCollector(c *Config) *Collector {
+	cc := &Collector{
+		wg:            sync.WaitGroup{},
+		durationCache: make(chan int64, BUFFERLEN),
+		localtimer:    time.NewTicker(time.Second * time.Duration(c.Frequency)).C,
+		histogram:     hist.NewHistogram(c.BinsNumber),
+		done:          make(chan struct{}),
+	}
+	return cc
+}
+
+// Start the collector
+func (c *Collector) Start() {
+	c.wg.Add(1) // add wg, and wait for goroutine start
+	go c.run()
+	c.wg.Wait()
+	c.wg.Add(1) // add wg and wait goroutine successfully stopped
+}
+
+func (c *Collector) run() {
+	var cost int64
+	c.wg.Done() // generate new collector goroutine, makesure it has started
+	for {
+		select {
+		case cost = <-c.durationCache: // on collection, main operation
+			c.Total++
+			c.localCount++
+			c.localTimeCount += cost
+			c.histogram.Add(cost)
+
+		case <-c.localtimer: // print timer per second
+			if c.localCount == 0 {
+				continue
 			}
-		}
-	}()
+			if !c.conf.NoPrint {
+				fmt.Println(c)
+			}
+			c.localCount = 0
+			c.localTimeCount = 0
 
-	if p.Number > 0 {
-		// in total request module
-		sum := int64(p.Number)
-		for i := 0; i < p.Parallel; i++ {
-			localwg.Add(1)
-			go func() {
-				defer localwg.Done()
-				var err error
-				job, err := p.job.Copy()
-				if err != nil {
-					fmt.Println("error in do copy", err)
-					return
-				}
-				defer job.After()
-				var start time.Time
-				var l int64
-				for {
-					// check if the request reach the goal
-					if l = atomic.AddInt64(&p.Total, 1); l > sum {
-						if l == sum+1 { // make sure only close once
-							close(p.done)
-						}
-						return
-					}
-					if err = job.Pre(); err != nil {
-						fmt.Println("error in do pre job", err)
-						return
-					}
-					start = time.Now()
-					err = job.Do()
-					p.collector <- time.Since(start)
-					if err != nil {
-						atomic.AddInt64(&p.errCount, 1)
-					}
-				}
-			}()
-		}
-	} else {
-		// in test duration module
-		// start all the worker and do job till cancelled
-		starter := make(chan struct{})
-		for i := 0; i < p.Parallel; i++ {
-			localwg.Add(1)
-			go func() {
-				defer localwg.Done()
-				var err error
-				job, err := p.job.Copy()
-				if err != nil {
-					fmt.Println("error in do copy", err)
-					return
-				}
-				defer job.After()
-				var start time.Time
-				<-starter
-				for {
-					select {
-					case <-p.done:
-						return
-					default:
-						if err = job.Pre(); err != nil {
-							fmt.Println("error in do pre job", err)
-							return
-						}
-						start = time.Now()
-						err = job.Do()
-						p.collector <- time.Since(start)
-						if err != nil {
-							atomic.AddInt64(&p.errCount, 1)
-						}
-						atomic.AddInt64(&p.Total, 1)
-					}
-				}
-			}()
-		}
-
-		p.wg.Add(1)
-		go func() {
-			// stoper to cancell all the workers
-			p.wg.Done()
-			close(starter)
-			time.Sleep(time.Second * time.Duration(p.Duration))
-			close(p.done)
+		case <-c.done: // close notify channel
+			for cost := range c.durationCache {
+				c.Total++
+				c.localCount++
+				c.localTimeCount += cost
+				c.histogram.Add(cost)
+			}
+			if !c.conf.NoPrint {
+				fmt.Println(c)
+			}
+			c.wg.Done() // signal wg done on exiting
 			return
-		}()
+		}
 	}
+}
 
-	// wait job done and do summarize
-	p.wg.Wait()
-	var sum2, max, min, p70, p80, p90, p95 float64
-	min = math.MaxFloat64
-	p.Total--
-	sortedSlice := make([]float64, 0, len(p.buffer))
-	for d := range p.buffer {
-		sortedSlice = append(sortedSlice, float64(d))
-		p.histogram.Add(float64(d))
-		p.Sum += float64(d)
-		sum2 += float64(d * d)
-	}
-	sort.Slice(sortedSlice, func(i, j int) bool { return sortedSlice[i] < sortedSlice[j] })
-	p70 = sortedSlice[int(float64(p.Total)*0.7)] / 1000000
-	p80 = sortedSlice[int(float64(p.Total)*0.8)] / 1000000
-	p90 = sortedSlice[int(float64(p.Total)*0.9)] / 1000000
-	p95 = sortedSlice[int(float64(p.Total)*0.95)] / 1000000
-	min = sortedSlice[0]
-	max = sortedSlice[p.Total-1]
+func (c *Collector) String() string {
+	return fmt.Sprintf("%s \t  Qps: %d \t  Avg Latency: %.3fms", time.Now().Format("15:04:05.000"),
+		c.localCount, float64(c.localTimeCount/c.localCount)/1000000)
+}
 
-	p.Mean = p.histogram.(*hist.NumericHistogram).Mean()
-	p.Stdev = math.Sqrt((float64(sum2) - 2*float64(p.Mean*p.Sum) +
-		float64(float64(p.Total)*p.Mean*p.Mean)) / float64(p.Total))
+// WaitStop will consume all
+func (c *Collector) WaitStop() {
+	close(c.done)
+	c.wg.Wait()
+}
 
-	fmt.Println("\n===============================================")
+func (c *Collector) PrintResult(io.Writer) {
+	fmt.Println("\n==================SUMMARIZE=======================")
 	// here show the histogram
-	if p.errCount != 0 {
-		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount,
-			float64(p.errCount*100)/float64(p.Total))
-	}
-	fmt.Printf("MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3f CV: %.3f%% ", max/1000000,
-		min/1000000, p.Mean/1000000, p.Stdev/1000000, p.Stdev/float64(p.Mean)*100)
-	fmt.Println(p.histogram)
+	fmt.Printf("MAX: %.3dms MIN: %.3dms MEAN: %.3dms STDEV: %.3f CV: %.3f%% ",
+		c.histogram.Max()/1000000, c.histogram.Min()/1000000, c.histogram.Mean()/1000000,
+		c.histogram.STDEV()/1000000, c.histogram.CV())
+
+	// print histogram chart
+	fmt.Println(c.histogram)
+
 	fmt.Println("===============================================")
-	fmt.Printf("Summary:\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n",
-		p70, p80, p90, p95)
+	fmt.Printf("Summary:\n70%% in:\t%.3dms\n80%% in:\t%.3dms\n90%% in:\t%.3dms\n95%% in:\t%.3dms\n99%% in:\t%.3dms",
+		c.histogram.Quantile(0.7)/1000000, c.histogram.Quantile(0.8)/1000000, c.histogram.Quantile(0.9)/1000000,
+		c.histogram.Quantile(0.95)/1000000, c.histogram.Quantile(0.99)/1000000)
+}
+
+// Collect a time duration and add to histogram
+func (c *Collector) Collect(d time.Duration) {
+	c.durationCache <- int64(d)
 }
