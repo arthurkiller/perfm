@@ -1,5 +1,9 @@
 # gohistogram - Histograms in Go
 
+## NOTICE
+___this project is based on VividCortex/gohistogram___
+___thanks for his awesome work.___
+
 ![build status](https://circleci.com/gh/VividCortex/gohistogram.png?circle-token=d37ec652ea117165cd1b342400a801438f575209)
 
 This package provides [Streaming Approximate Histograms](https://vividcortex.com/blog/2013/07/08/streaming-approximate-histograms/)
@@ -39,7 +43,7 @@ A picture of kittens:
 ### Using in your own code
 
     $ go get github.com/VividCortex/gohistogram
-    
+
 ```go
 import "github.com/VividCortex/gohistogram"
 ```

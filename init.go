@@ -10,7 +10,7 @@ func Reset(j Job) {
 
 // Start the perf monitor
 func Start() {
-	p.Start()
+	p.Start(nil)
 }
 
 func init() {

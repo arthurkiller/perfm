@@ -10,14 +10,11 @@ import (
 
 // Monitor implemeneted perfMonitor
 type Monitor struct {
-	c         Config         //configration for perfm
-	wg        sync.WaitGroup //wait group to block the stop and sync the work thread
-	done      chan int       //stop the perfm
-	isStopped int64          //is stopped for double check
-	startTime time.Time      //keep the start time
+	c    Config        //configration for perfm
+	done chan struct{} //stop the perfm
 
-	localwg sync.WaitGroup
-	starter *sync.Cond
+	wg      sync.WaitGroup //wait group to block the stop and sync the work thread
+	starter chan struct{}
 
 	collector *Collector //get the request cost from every done()
 	total     int64      //total request by count
@@ -31,7 +28,13 @@ type Monitor struct {
 // NewMonitor generate perfm
 func NewMonitor(c Config) PerfMonitor {
 	return &Monitor{
-		starter: sync.NewCond(&sync.Mutex{}),
+		c:         c,
+		done:      make(chan struct{}),
+		wg:        sync.WaitGroup{},
+		starter:   make(chan struct{}),
+		collector: NewCollector(&c),
+		total:     0,
+		errCount:  0,
 	}
 }
 
@@ -41,9 +44,8 @@ func (p *Monitor) Reset(job Job) {
 	p.job = job
 
 	// reset monitor
-	p.done = make(chan int, 0)
+	p.done = make(chan struct{})
 	p.wg = sync.WaitGroup{}
-	p.isStopped = 0
 	p.errCount = 0
 }
 
@@ -61,15 +63,15 @@ func (p *Monitor) totalWorker() {
 	defer job.After()
 	var start time.Time
 	// done local wg
-	p.localwg.Done()
+	p.wg.Done()
 
 	var l int64
 	// wait for start
-	p.starter.Wait()
+	<-p.starter
 	for { // main work loop
 		select {
 		case <-p.done: // on close
-			p.localwg.Done()
+			p.wg.Done()
 			return
 		default:
 			// check if the request reach the goal
@@ -80,13 +82,14 @@ func (p *Monitor) totalWorker() {
 				}
 				// other goroutine exit now
 				// TODO XXX continue?
-				p.localwg.Done()
+				atomic.AddInt64(&p.total, -1)
+				p.wg.Done()
 				return
 			}
 
 			if err = job.Pre(); err != nil {
 				fmt.Println("error in do pre job", err)
-				p.localwg.Done()
+				p.wg.Done()
 				return
 			}
 			start = time.Now()
@@ -110,20 +113,20 @@ func (p *Monitor) durationWorker() {
 	defer job.After()
 	var start time.Time
 	// done local wg
-	p.localwg.Done()
+	p.wg.Done()
 
 	// wait for start
-	p.starter.Wait()
+	<-p.starter
 	for { // main work loop
 		select {
 		case <-p.done: // on close
-			p.localwg.Done()
+			p.wg.Done()
 			return
 		default:
 			atomic.AddInt64(&p.total, 1)
 			if err = job.Pre(); err != nil {
 				fmt.Println("error in do pre job", err)
-				p.localwg.Done()
+				p.wg.Done()
 				return
 			}
 			start = time.Now()
@@ -137,7 +140,10 @@ func (p *Monitor) durationWorker() {
 }
 
 // Start the benchmark with given arguments on regisit
-func (p *Monitor) Start() {
+func (p *Monitor) Start(j Job) {
+	if j != nil {
+		p.job = j
+	}
 	if p.job == nil {
 		panic("error job does not registered yet")
 	}
@@ -152,7 +158,7 @@ func (p *Monitor) Start() {
 	// 2. start all job, wait on wg
 	// 3. run all jobs, start benchmark
 	p.collector.Start()
-	p.localwg.Add(p.c.Parallel)
+	p.wg.Add(p.c.Parallel)
 	// in test duration module
 	// start all the worker and do job till cancelled
 	for i := 0; i < p.c.Parallel; i++ {
@@ -168,27 +174,30 @@ func (p *Monitor) Start() {
 
 	// now all goroutine started
 	// add wg again before start
-	p.localwg.Add(p.c.Parallel)
+	p.wg.Add(p.c.Parallel)
 
 	// start all job
-	p.starter.Broadcast()
+	close(p.starter)
 
 	// for duration mode, sleep and send signal
 	if p.c.Number == 0 {
 		time.Sleep(time.Second * time.Duration(p.c.Duration))
 		close(p.done)
 	}
-	p.localwg.Wait()
+	p.wg.Wait()
 	// stop at here, wait for exit
 
+	// stop here
+	p.collector.WaitStop()
+
+	fmt.Println("===================JOB DONE=======================")
 	// print error info
 	if p.errCount != 0 {
 		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount,
 			float64(p.errCount*100)/float64(p.total))
 	}
 
-	// stop here
-	p.collector.WaitStop()
+	// then do print
 	p.collector.PrintResult(os.Stdout)
 
 	// wait job done and do summarize

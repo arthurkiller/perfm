@@ -31,7 +31,7 @@ type Job interface {
 //PerfMonitor define the atcion about perfmonitor
 type PerfMonitor interface {
 	Reset(Job) //regist the job to perfm
-	Start()    //start the perf monitor
+	Start(Job) //start the perf monitor
 }
 
 // New perfmonitor
@@ -72,13 +72,6 @@ type Config struct {
 
 	// collector config
 	BinsNumber int `json:"bins_number"` // set the histogram bins number
-
-	// XXX
-	//GrowthFactor   float64 `json:"growth_factor"`    // GrowthFactor is the growth factor of the buckets.
-	//MinValue       int64   `json:"min_value"`        // MinValue is the lower bound of the first bucket.
-	//BaseBucketSize float64 `json:"base_bucket_size"` // BaseBucketSize is the size of the first bucket.
-	//BufferSize     int     `json:"buffer_size"`      // set for the global time channel buffer size
-	// A value of 0.1 indicates that bucket N+1 will be 10% larger than bucket N.
 }
 
 //NewConfig gen the config
@@ -90,9 +83,6 @@ func NewConfig(options ...Options) Config {
 		NoPrint:    false,
 		Frequency:  1,
 		BinsNumber: 15,
-		//GrowthFactor:   1.4,
-		//MinValue:       1000000,
-		//BaseBucketSize: 1000000,
 	}
 	for _, o := range options {
 		o(&c)
@@ -156,6 +146,14 @@ func NewCollector(c *Config) *Collector {
 		localtimer:    time.NewTicker(time.Second * time.Duration(c.Frequency)).C,
 		histogram:     hist.NewHistogram(c.BinsNumber),
 		done:          make(chan struct{}),
+		conf:          c,
+
+		Sum:            0,
+		Stdev:          0,
+		Mean:           0,
+		Total:          0,
+		localCount:     0,
+		localTimeCount: 0,
 	}
 	return cc
 }
@@ -170,15 +168,10 @@ func (c *Collector) Start() {
 
 func (c *Collector) run() {
 	var cost int64
+	var ok bool
 	c.wg.Done() // generate new collector goroutine, makesure it has started
 	for {
 		select {
-		case cost = <-c.durationCache: // on collection, main operation
-			c.Total++
-			c.localCount++
-			c.localTimeCount += cost
-			c.histogram.Add(cost)
-
 		case <-c.localtimer: // print timer per second
 			if c.localCount == 0 {
 				continue
@@ -188,6 +181,15 @@ func (c *Collector) run() {
 			}
 			c.localCount = 0
 			c.localTimeCount = 0
+
+		case cost, ok = <-c.durationCache: // on collection, main operation
+			if !ok {
+				continue
+			}
+			c.Total++
+			c.localCount++
+			c.localTimeCount += cost
+			c.histogram.Add(cost)
 
 		case <-c.done: // close notify channel
 			for cost := range c.durationCache {
@@ -206,30 +208,33 @@ func (c *Collector) run() {
 }
 
 func (c *Collector) String() string {
-	return fmt.Sprintf("%s \t  Qps: %d \t  Avg Latency: %.3fms", time.Now().Format("15:04:05.000"),
-		c.localCount, float64(c.localTimeCount/c.localCount)/1000000)
+	return fmt.Sprintf("%s\tQps: %-6.d\tCumulate: %-8.d\tAvg Latency: %-7.3fms", time.Now().Format("15:04:05.000"),
+		c.localCount, c.Total, float64(c.localTimeCount/c.localCount)/1000000)
 }
 
 // WaitStop will consume all
 func (c *Collector) WaitStop() {
+	close(c.durationCache) // close channel
 	close(c.done)
 	c.wg.Wait()
 }
 
-func (c *Collector) PrintResult(io.Writer) {
-	fmt.Println("\n==================SUMMARIZE=======================")
-	// here show the histogram
-	fmt.Printf("MAX: %.3dms MIN: %.3dms MEAN: %.3dms STDEV: %.3f CV: %.3f%% ",
-		c.histogram.Max()/1000000, c.histogram.Min()/1000000, c.histogram.Mean()/1000000,
-		c.histogram.STDEV()/1000000, c.histogram.CV())
+// PrintResult print histogram chart to io writer
+func (c *Collector) PrintResult(out io.Writer) {
+	fmt.Fprintf(out, "\n==================SUMMARIZE=======================\n")
 
 	// print histogram chart
-	fmt.Println(c.histogram)
+	fmt.Fprintf(out, "%s\n", c.histogram)
+	fmt.Fprintf(out, "MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3fms CV: %.3f%% Variance:%.3f ms2\n",
+		float64(c.histogram.Max())/1000000, float64(c.histogram.Min())/1000000, c.histogram.Mean()/1000000,
+		c.histogram.STDEV()/1000000, c.histogram.CV(), c.histogram.Variance()/1000000)
 
-	fmt.Println("===============================================")
-	fmt.Printf("Summary:\n70%% in:\t%.3dms\n80%% in:\t%.3dms\n90%% in:\t%.3dms\n95%% in:\t%.3dms\n99%% in:\t%.3dms",
-		c.histogram.Quantile(0.7)/1000000, c.histogram.Quantile(0.8)/1000000, c.histogram.Quantile(0.9)/1000000,
-		c.histogram.Quantile(0.95)/1000000, c.histogram.Quantile(0.99)/1000000)
+	fmt.Fprintf(out, "Quantile:\n50%% in:\t%.3fms\n60%% in:\t%.3fms\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n99%% in:\t%.3fms\n",
+		float64(c.histogram.Quantile(0.5))/1000000, float64(c.histogram.Quantile(0.6))/1000000,
+		float64(c.histogram.Quantile(0.7))/1000000, float64(c.histogram.Quantile(0.8))/1000000,
+		float64(c.histogram.Quantile(0.9))/1000000, float64(c.histogram.Quantile(0.95))/1000000,
+		float64(c.histogram.Quantile(0.99))/1000000)
+	fmt.Fprintf(out, "===============================================\n")
 }
 
 // Collect a time duration and add to histogram

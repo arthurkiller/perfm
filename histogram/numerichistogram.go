@@ -8,15 +8,22 @@ import (
 	"math"
 )
 
+type bin struct {
+	value int64
+	count int64
+}
+
 type NumericHistogram struct {
 	bins    []bin
 	maxbins int
 
-	total int64
-	max   int64
-	min   int64
-	sum   int64
-	sum2  int64 // sum up value pow 2
+	total  int64
+	max    int64
+	min    int64
+	sum    int64
+	sum2   int64
+	m_sum  []int64
+	m_sum2 []int64 // sum up value pow 2
 }
 
 // NewHistogram returns a new NumericHistogram with a maximum of n bins.
@@ -30,14 +37,31 @@ func NewHistogram(n int) *NumericHistogram {
 		total:   0,
 		max:     -math.MaxInt64,
 		min:     math.MaxInt64,
-		sum:     0,
-		sum2:    0,
+		m_sum:   []int64{},
+		m_sum2:  []int64{},
 	}
 }
 
 func (h *NumericHistogram) Add(n int64) {
 	defer h.trim()
 	h.total++
+	h.sum += n
+	h.sum2 += n * n
+	if n > h.max {
+		h.max = n
+	}
+	if n < h.min {
+		h.min = n
+	}
+
+	// TODO this is not best idea
+	if h.sum2 > math.MaxInt64/100 {
+		h.m_sum = append(h.m_sum, h.sum)
+		h.m_sum2 = append(h.m_sum2, h.sum2)
+		h.sum = 0
+		h.sum2 = 0
+	}
+
 	for i := range h.bins {
 		if h.bins[i].value == n {
 			h.bins[i].count++
@@ -45,7 +69,6 @@ func (h *NumericHistogram) Add(n int64) {
 		}
 
 		if h.bins[i].value > n {
-
 			newbin := bin{value: n, count: 1}
 			head := append(make([]bin, 0), h.bins[0:i]...)
 
@@ -55,15 +78,7 @@ func (h *NumericHistogram) Add(n int64) {
 			return
 		}
 	}
-
 	h.bins = append(h.bins, bin{count: 1, value: n})
-	h.sum += n
-	h.sum2 += n * n
-	if n > h.max {
-		h.max = n
-	} else if n < h.min {
-		h.min = n
-	}
 }
 
 func (h *NumericHistogram) Quantile(q float64) int64 {
@@ -81,6 +96,9 @@ func (h *NumericHistogram) Quantile(q float64) int64 {
 
 // CDF returns the value of the cumulative distribution function at x
 func (h *NumericHistogram) CDF(x int64) int64 {
+	if h.total == 0 {
+		return 0
+	}
 	var count int64 = 0
 	for i := range h.bins {
 		if h.bins[i].value <= x {
@@ -92,8 +110,16 @@ func (h *NumericHistogram) CDF(x int64) int64 {
 }
 
 // Mean returns the sample mean of the distribution
-func (h *NumericHistogram) Mean() int64 {
-	return h.sum / int64(h.total)
+func (h *NumericHistogram) Mean() float64 {
+	if h.total == 0 {
+		return 0
+	}
+
+	var means = float64(h.sum) / float64(h.total)
+	for _, v := range h.m_sum {
+		means += float64(v) / float64(h.total)
+	}
+	return means
 }
 
 func (h *NumericHistogram) Max() int64 {
@@ -105,27 +131,41 @@ func (h *NumericHistogram) Min() int64 {
 }
 
 // STDEV for standard deviation
+// NOTE how to estimate stdev in streaming data
+// http://en.wikipedia.org/wiki/Standard_deviation#Rapid_calculation_methods
 func (h *NumericHistogram) STDEV() float64 {
-	return math.Sqrt(float64(h.sum2-2*h.Mean()*h.sum+h.total*h.Mean()*h.Mean()) / float64(h.total))
+	if h.total == 0 {
+		return 0
+	}
+	var means2 = float64(h.sum2) / float64(h.total)
+	for _, v := range h.m_sum2 {
+		means2 += float64(v) / float64(h.total)
+	}
+	mean := h.Mean()
+
+	// NOTE we should not use total-1 in the lase mean caculate, it's full data mean, not simpling
+	return math.Sqrt(means2 - float64(mean*mean))
 }
 
 // CV for Coefficient of Variation
 func (h *NumericHistogram) CV() float64 {
-	return h.STDEV() / float64(h.Mean()) * 100
+	if h.Mean() == 0 {
+		return 0
+	}
+	return h.STDEV() * 100 / h.Mean()
 }
 
 // Variance returns the variance of the distribution
-func (h *NumericHistogram) Variance() int64 {
+func (h *NumericHistogram) Variance() float64 {
 	if h.total == 0 {
 		return 0
 	}
-
-	var sum int64
-	mean := h.Mean()
-	for i := range h.bins {
-		sum += (h.bins[i].count * (h.bins[i].value - mean) * (h.bins[i].value - mean))
+	var means2 = float64(h.sum2) / float64(h.total)
+	for _, v := range h.m_sum2 {
+		means2 += float64(v) / float64(h.total)
 	}
-	return sum / int64(h.total)
+	mean := h.Mean()
+	return means2 - float64(mean*mean)
 }
 
 func (h *NumericHistogram) Count() int64 {
@@ -174,11 +214,11 @@ func (h *NumericHistogram) String() string {
 	for i := range h.bins {
 		cum += h.bins[i].count
 		var bar string
-		for j := 0; j < int(int64(h.bins[i].count)/int64(h.total)*100); j++ {
+		for j := 0; j < int(float64(h.bins[i].count*100)/float64(h.total)); j++ {
 			bar += "█"
 		}
-		str += fmt.Sprintf("%.3fms\t Count:%.0f[%v %.1f%%]\t %-v\n",
-			h.bins[i].value/1000000, h.bins[i].count, cum, (int64(cum)/int64(h.total))*100, bar)
+		str += fmt.Sprintf("%-8.3fms\t Count: %-9.d[Cum: %-8.d At: %-5.1f%%]\t%-s\n",
+			float64(h.bins[i].value)/1000000, h.bins[i].count, cum, float64(cum*100)/float64(h.total), bar)
 	}
 	return str
 }
