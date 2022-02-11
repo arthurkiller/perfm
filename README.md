@@ -2,9 +2,25 @@
 a golang performence testing platform
 
 ## What's new
-* v1.0 is comming out
-* reconstruct the project for easy use
-* remove the divided operation for bench and caculate
+* v3.0 is comming out
+* reconstruct the project, make design clean and clear
+* upgrade histogram implementation, now it can treate ___streaming data___ and caculate STDEV and CV
+
+## What's in it
+
+
+┌─────────────────────────────────────────────┐
+│ ┌─Manager─────────────────┐      ┌───────┐  │
+│ │                         │     ┌┴──────┐│  │
+│ │                         │    ┌┴Workers││  │
+│ │                         ├────►       │││  │
+│ └──────────────────┬──────┘    │ Job   │││  │
+│                    │           │       │├┘  │
+│ ┌─Collector────────▼──────┐    │       ││   │
+│ │                         ◄────┤       ├┘   │
+│ │       Histogram         │    └───────┘    │
+│ └─────────────────────────┘                 │
+└─────────────────────────────────────────────┘
 
 ## Understand perfm Workflow
 
@@ -27,28 +43,29 @@ job.After()
     for parallels {
         job.Copy()
     }
-+---------+ +---------+ +---------+
-|   job   | |   job   | |   job   |
-|         | |         | |         |
-|for{     | |for{     | |for{     |
-| pre()   | | pre()   | | pre()   |
-| do()    | | do()    | | do()    | ... ...
-|}        | |}        | |}        |
-| after() | | after() | | after() |
-+---------+ +---------+ +---------+
 ```
+
+> +---------+ +---------+ +---------+
+> |   job   | |   job   | |   job   |
+> |         | |         | |         |
+> |for{     | |for{     | |for{     |
+> | pre()   | | pre()   | | pre()   |
+> | do()    | | do()    | | do()    | ... ...
+> |}        | |}        | |}        |
+> | after() | | after() | | after() |
+> +---------+ +---------+ +---------+
 
 
 ## Short Example
 
-___3 steps to start your benchmark!___
+___2 steps to start your benchmark!___
 
-1. create you perfm.Job
-2. init the job and `regist` to perfm
-3. call perfm.Start()
+1. implement you own `perfm.Job`
+2. call `perfm.Start(Job)`
 
 You can start with `Wizard.sh` creating your job templates.
 
+basic http benchmark job by example
 ```go
 type job struct {
 	// job private data
@@ -78,16 +95,18 @@ func (j *job) After() {
 perfm := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(10))
 j := &job{}
 j.url = "http://www.baidu.com"
-perfm.Regist(j)
-perfm.Start()
+perfm.Start(j)
 ```
 
 ![test demo](./demo/screen.png)
 
 ## Milestone
-* version 0.1 
+* version 0.1
     support the qps and average cost counting
 * version 1.0
     change the perfm into a testing interface, just rejuest and start, the test will be automaticly done
 * version 2.0
-    add the excel/numbers .cvs file export. make it easy to draw graphic with other data processor.
+    ~~add the excel/numbers .cvs file export. make it easy to draw graphic with other data processor.~~
+* version 3.0
+    * reconstruct on API and better support for streaming data.
+	* add color print later

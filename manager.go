@@ -169,25 +169,21 @@ func (p *Monitor) Start(j Job) {
 		}
 	}
 
-	// wait all job started
+	// wait all job goroutine created
 	p.wg.Wait()
 
-	// now all goroutine started
-	// add wg again before start
+	// now all goroutine created successfully, add wg again before start
 	p.wg.Add(p.c.Parallel)
 
-	// start all job
+	// send signal, start all job
 	close(p.starter)
-
-	// for duration mode, sleep and send signal
-	if p.c.Number == 0 {
+	if p.c.Number == 0 { // for duration mode, sleep then stop
 		time.Sleep(time.Second * time.Duration(p.c.Duration))
 		close(p.done)
 	}
-	p.wg.Wait()
-	// stop at here, wait for exit
+	p.wg.Wait() // wait worker for exit
 
-	// stop here
+	// send close to collector, wait for collection done
 	p.collector.WaitStop()
 
 	fmt.Println("===================JOB DONE=======================")
