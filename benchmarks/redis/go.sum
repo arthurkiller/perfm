@@ -1,5 +1,7 @@
 github.com/arthurkiller/perfm v0.0.0-20210621095212-7e26855105b9 h1:4W0dua7Tb5NWW1WW55o4k0DmXKpRPIyP+X+klbmxvQU=
 github.com/arthurkiller/perfm v0.0.0-20210621095212-7e26855105b9/go.mod h1:wlL0Kzax85skJyyEt/Mzrxs8J3Gej1NjZr69nmsD/j0=
+github.com/arthurkiller/perfm v0.0.0-20220506102505-a056db7f52f5 h1:KqxxoZX3SC/TKQdk0mlUXu5y6wIOZmIpriD90upqrWc=
+github.com/arthurkiller/perfm v0.0.0-20220506102505-a056db7f52f5/go.mod h1:ZWPwUOkTLSl8u3OICCn212r7QH7jmrs3DCmRCdcF7hw=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/gomodule/redigo v1.8.8 h1:f6cXq6RRfiyrOJEV7p3JhLDlmawGBVBBP1MggY8Mo4E=
