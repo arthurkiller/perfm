@@ -112,4 +112,4 @@ perfm.Start(j)
     ~~add the excel/numbers .cvs file export. make it easy to draw graphic with other data processor.~~
 * version 3.0
     * reconstruct on API and better support for streaming data.
-	* add color print later
+    * bug fixing
