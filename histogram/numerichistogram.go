@@ -17,13 +17,13 @@ type NumericHistogram struct {
 	bins    []bin
 	maxbins int
 
-	total  int64
-	max    int64
-	min    int64
-	sum    int64
-	sum2   int64
-	m_sum  []int64
-	m_sum2 []int64 // sum up value pow 2
+	total int64
+	max   int64
+	min   int64
+	sum   int64
+	sum2  int64
+	mSum  []int64
+	mSum2 []int64 // sum up value pow 2
 }
 
 // NewHistogram returns a new NumericHistogram with a maximum of n bins.
@@ -37,8 +37,8 @@ func NewHistogram(n int) *NumericHistogram {
 		total:   0,
 		max:     -math.MaxInt64,
 		min:     math.MaxInt64,
-		m_sum:   []int64{},
-		m_sum2:  []int64{},
+		mSum:    []int64{},
+		mSum2:   []int64{},
 	}
 }
 
@@ -56,8 +56,8 @@ func (h *NumericHistogram) Add(n int64) {
 
 	// TODO this is not best idea
 	if h.sum2 > math.MaxInt64/100 {
-		h.m_sum = append(h.m_sum, h.sum)
-		h.m_sum2 = append(h.m_sum2, h.sum2)
+		h.mSum = append(h.mSum, h.sum)
+		h.mSum2 = append(h.mSum2, h.sum2)
 		h.sum = 0
 		h.sum2 = 0
 	}
@@ -116,7 +116,7 @@ func (h *NumericHistogram) Mean() float64 {
 	}
 
 	var means = float64(h.sum) / float64(h.total)
-	for _, v := range h.m_sum {
+	for _, v := range h.mSum {
 		means += float64(v) / float64(h.total)
 	}
 	return means
@@ -138,7 +138,7 @@ func (h *NumericHistogram) STDEV() float64 {
 		return 0
 	}
 	var means2 = float64(h.sum2) / float64(h.total)
-	for _, v := range h.m_sum2 {
+	for _, v := range h.mSum2 {
 		means2 += float64(v) / float64(h.total)
 	}
 	mean := h.Mean()
@@ -161,7 +161,7 @@ func (h *NumericHistogram) Variance() float64 {
 		return 0
 	}
 	var means2 = float64(h.sum2) / float64(h.total)
-	for _, v := range h.m_sum2 {
+	for _, v := range h.mSum2 {
 		means2 += float64(v) / float64(h.total)
 	}
 	mean := h.Mean()

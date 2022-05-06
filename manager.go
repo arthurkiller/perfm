@@ -3,6 +3,7 @@ package perfm
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,15 +11,14 @@ import (
 
 // Monitor implemeneted perfMonitor
 type Monitor struct {
-	c    Config        //configration for perfm
-	done chan struct{} //stop the perfm
+	c     Config        //configration for perfm
+	done  chan struct{} //stop the perfm, used in duratoin worker
+	total int64         //total request, used in total worker
 
 	wg      sync.WaitGroup //wait group to block the stop and sync the work thread
 	starter chan struct{}
 
 	collector *Collector //get the request cost from every done()
-	total     int64      //total request by count
-	errCount  int64      //error counter count error request
 
 	//job implement benchmark job
 	//error occoured in job.Do will be collected
@@ -34,7 +34,6 @@ func NewMonitor(c Config) PerfMonitor {
 		starter:   make(chan struct{}),
 		collector: NewCollector(&c),
 		total:     0,
-		errCount:  0,
 	}
 }
 
@@ -46,7 +45,6 @@ func (p *Monitor) Reset(job Job) {
 	// reset monitor
 	p.done = make(chan struct{})
 	p.wg = sync.WaitGroup{}
-	p.errCount = 0
 }
 
 // TODO merge into one
@@ -96,7 +94,7 @@ func (p *Monitor) totalWorker() {
 			err = job.Do()
 			p.collector.Collect(time.Since(start))
 			if err != nil {
-				atomic.AddInt64(&p.errCount, 1)
+				p.collector.ReportError(err)
 			}
 		}
 	}
@@ -133,10 +131,31 @@ func (p *Monitor) durationWorker() {
 			err = job.Do()
 			p.collector.Collect(time.Since(start))
 			if err != nil {
-				atomic.AddInt64(&p.errCount, 1)
+				p.collector.ReportError(err)
 			}
 		}
 	}
+}
+
+func (p *Monitor) processSiginter() {
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, os.Interrupt)
+	<-sigchan
+	close(p.done)
+	p.wg.Wait() // wait worker for exit
+
+	// send close to collector, wait for collection done
+	p.collector.WaitStop()
+
+	fmt.Println("===============SIGINT RECEIVED====================")
+
+	// then do print
+	p.collector.PrintResult(os.Stdout)
+
+	// wait job done and do summarize
+	p.wg.Wait()
+
+	os.Exit(0)
 }
 
 // Start the benchmark with given arguments on regisit
@@ -147,6 +166,7 @@ func (p *Monitor) Start(j Job) {
 	if p.job == nil {
 		panic("error job does not registered yet")
 	}
+	go p.processSiginter()
 
 	// If job implement descripetion as Stringer
 	if _, ok := p.job.(fmt.Stringer); ok {
@@ -154,13 +174,12 @@ func (p *Monitor) Start(j Job) {
 	}
 
 	fmt.Println("==================JOB STARTED====================")
-	// 1. start monitor
-	// 2. start all job, wait on wg
-	// 3. run all jobs, start benchmark
-	p.collector.Start()
+	// Steps:
+	// 1. start all job, wait on wg
+	// 2. run all jobs, start benchmark
+
+	// wait all job goroutine created
 	p.wg.Add(p.c.Parallel)
-	// in test duration module
-	// start all the worker and do job till cancelled
 	for i := 0; i < p.c.Parallel; i++ {
 		if p.c.Number != 0 {
 			go p.totalWorker()
@@ -168,32 +187,24 @@ func (p *Monitor) Start(j Job) {
 			go p.durationWorker()
 		}
 	}
-
-	// wait all job goroutine created
 	p.wg.Wait()
 
 	// now all goroutine created successfully, add wg again before start
+	// this is used for exit waitting
 	p.wg.Add(p.c.Parallel)
 
-	// send signal, start all job
-	close(p.starter)
-	if p.c.Number == 0 { // for duration mode, sleep then stop
+	p.collector.Start()  // mark the start time
+	close(p.starter)     // send signal, start all jobs
+	if p.c.Number == 0 { // duration mode, sleep then stop
 		time.Sleep(time.Second * time.Duration(p.c.Duration))
 		close(p.done)
 	}
-	p.wg.Wait() // wait worker for exit
+	p.wg.Wait() // wait workers exit
 
-	// send close to collector, wait for collection done
+	// send close to collector, wait until collection done
 	p.collector.WaitStop()
 
 	fmt.Println("===================JOB DONE=======================")
-	// print error info
-	if p.errCount != 0 {
-		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", p.errCount,
-			float64(p.errCount*100)/float64(p.total))
-	}
-
-	// then do print
 	p.collector.PrintResult(os.Stdout)
 
 	// wait job done and do summarize

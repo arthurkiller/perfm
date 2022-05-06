@@ -3,7 +3,10 @@ package perfm
 import (
 	"fmt"
 	"io"
+	"math"
+	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	hist "github.com/arthurkiller/perfm/histogram"
@@ -43,18 +46,27 @@ func New(options ...Options) PerfMonitor {
 // BUFFERLEN set for duration channel length
 const BUFFERLEN = 0x7FFFF
 
+// ERRORBUFFERLEN set for error collecting channel length
+const ERRORBUFFERLEN = 1
+
 // Collector collect all perfm config and do the statistic
 type Collector struct {
-	Sum   float64 //Sum of the per request cost
-	Stdev float64 //Standard Deviation
-	Mean  float64 //Mean about distribution
-	Total int64   //total request by count
+	Sum             float64 //Sum of the per request cost
+	Stdev           float64 //Standard Deviation
+	Mean            float64 //Mean about distribution
+	Total           int64   //total request by count
+	errCount        int64   //error counter count error request
+	startTime       time.Time
+	runningDuration time.Duration
+	maxQPS          int64
+	minQPS          int64
 
 	conf          *Config
 	wg            sync.WaitGroup
 	durationCache chan int64             // duration cache buffer, wait for operation
 	histogram     *hist.NumericHistogram // used to print the histogram
 	done          chan struct{}          // close channel
+	errChan       chan error
 
 	localtimer     <-chan time.Time // print timer
 	localCount     int64            // count for the number in the sampling times
@@ -143,27 +155,34 @@ func NewCollector(c *Config) *Collector {
 	cc := &Collector{
 		wg:            sync.WaitGroup{},
 		durationCache: make(chan int64, BUFFERLEN),
-		localtimer:    time.NewTicker(time.Second * time.Duration(c.Frequency)).C,
+		errChan:       make(chan error, ERRORBUFFERLEN),
+		localtimer:    time.Tick(time.Second * time.Duration(c.Frequency)),
 		histogram:     hist.NewHistogram(c.BinsNumber),
 		done:          make(chan struct{}),
 		conf:          c,
+		errCount:      0,
 
 		Sum:            0,
 		Stdev:          0,
 		Mean:           0,
 		Total:          0,
+		maxQPS:         0,
+		minQPS:         math.MaxInt64,
 		localCount:     0,
 		localTimeCount: 0,
 	}
+
+	// then do the starting, start the goroutine
+	cc.wg.Add(1) // add wg, and wait for goroutine start
+	go cc.run()
+	cc.wg.Wait()
+	cc.wg.Add(1) // add wg and wait goroutine successfully stopped
 	return cc
 }
 
-// Start the collector
+// Start mark the start time
 func (c *Collector) Start() {
-	c.wg.Add(1) // add wg, and wait for goroutine start
-	go c.run()
-	c.wg.Wait()
-	c.wg.Add(1) // add wg and wait goroutine successfully stopped
+	c.startTime = time.Now()
 }
 
 func (c *Collector) run() {
@@ -177,8 +196,22 @@ func (c *Collector) run() {
 				continue
 			}
 			if !c.conf.NoPrint {
-				fmt.Println(c)
+				// update local qps counting
+				if c.localCount > c.maxQPS {
+					c.maxQPS = c.localCount
+				} else if c.localCount < c.minQPS {
+					c.minQPS = c.localCount
+				}
+
+				fmt.Println(c) // print statistic line
+
+				select {
+				case err := <-c.errChan:
+					fmt.Fprintf(os.Stderr, "[ERR]: %v\n", err)
+				default:
+				}
 			}
+
 			c.localCount = 0
 			c.localTimeCount = 0
 
@@ -208,12 +241,13 @@ func (c *Collector) run() {
 }
 
 func (c *Collector) String() string {
-	return fmt.Sprintf("%s\tQps: %-6.d\tCumulate: %-8.d\tAvg Latency: %-7.3fms", time.Now().Format("15:04:05.000"),
-		c.localCount, c.Total, float64(c.localTimeCount/c.localCount)/1000000)
+	return fmt.Sprintf("%s\tCurrent Qps: %-6.d\tAverage Qps: %-6.d\tCumulate: %-8.d\tCurrent Latency: %-7.3fms", time.Now().Format("15:04:05.000"),
+		c.localCount, c.Total*1000/time.Since(c.startTime).Milliseconds(), c.Total, float64(c.localTimeCount/c.localCount)/1000000)
 }
 
 // WaitStop will consume all
 func (c *Collector) WaitStop() {
+	c.runningDuration = time.Since(c.startTime)
 	close(c.durationCache) // close channel
 	close(c.done)
 	c.wg.Wait()
@@ -223,11 +257,21 @@ func (c *Collector) WaitStop() {
 func (c *Collector) PrintResult(out io.Writer) {
 	fmt.Fprintf(out, "\n==================SUMMARIZE=======================\n")
 
+	// print error info
+	if c.errCount != 0 {
+		fmt.Printf("Total errors: %v\t Error percentage: %.3f%%\n", c.errCount,
+			float64(c.errCount*100)/float64(c.Total))
+	}
+
 	// print histogram chart
 	fmt.Fprintf(out, "%s\n", c.histogram)
-	fmt.Fprintf(out, "MAX: %.3fms MIN: %.3fms MEAN: %.3fms STDEV: %.3fms CV: %.3f%% Variance:%.3f ms2\n",
+	fmt.Fprintf(out, "Latency Max: %.3fms Min: %.3fms Mean: %.3fms STDEV: %.3fms CV: %.3f%% Variance:%.3f ms2\n",
 		float64(c.histogram.Max())/1000000, float64(c.histogram.Min())/1000000, c.histogram.Mean()/1000000,
 		c.histogram.STDEV()/1000000, c.histogram.CV(), c.histogram.Variance()/1000000)
+
+	if c.runningDuration.Milliseconds() > 0 {
+		fmt.Fprintf(out, "Qps Max: %d Min: %d Mean: %d\n", c.maxQPS, c.minQPS, (c.Total-c.localCount)*1000/c.runningDuration.Milliseconds())
+	}
 
 	fmt.Fprintf(out, "Quantile:\n50%% in:\t%.3fms\n60%% in:\t%.3fms\n70%% in:\t%.3fms\n80%% in:\t%.3fms\n90%% in:\t%.3fms\n95%% in:\t%.3fms\n99%% in:\t%.3fms\n",
 		float64(c.histogram.Quantile(0.5))/1000000, float64(c.histogram.Quantile(0.6))/1000000,
@@ -240,4 +284,14 @@ func (c *Collector) PrintResult(out io.Writer) {
 // Collect a time duration and add to histogram
 func (c *Collector) Collect(d time.Duration) {
 	c.durationCache <- int64(d)
+}
+
+// ReportError try to put error into collector chan for print
+// parallel safe
+func (c *Collector) ReportError(e error) {
+	atomic.AddInt64(&c.errCount, 1)
+	select {
+	case c.errChan <- e:
+	default:
+	}
 }
