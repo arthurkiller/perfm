@@ -6,6 +6,11 @@
 * build with `go`, easily to use and modify
 * better result print with histogram
 
+## Build
+* you need to have `go` installed locally
+* run `go build`
+* set `env GOOS=linux` for cross platform build
+
 ## Usage
 ```
 Usage of ./redis:
