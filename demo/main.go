@@ -13,7 +13,7 @@ type job struct {
 }
 
 func (j *job) String() string {
-	return fmt.Sprintf("demo job: send GET to %s", j.url)
+	return fmt.Sprintf("testing demo job: send GET to %s", j.url)
 }
 
 // Copy will called in parallel
@@ -36,13 +36,7 @@ func (j *job) After() {
 }
 
 func main() {
-	// start it directly!
 	j := &job{url: "http://www.baidu.com"}
-	perfm.Regist(j)
-	perfm.Start()
 
-	// or control it yourself!
-	p := perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5))
-	p.Regist(j)
-	p.Start()
+	perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5)).Start(j)
 }
