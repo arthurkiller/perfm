@@ -9,8 +9,8 @@ func Reset(j Job) {
 }
 
 // Start the perf monitor
-func Start() {
-	p.Start(nil)
+func Start(j Job) {
+	p.Start(j)
 }
 
 func init() {

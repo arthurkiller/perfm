@@ -38,5 +38,5 @@ func (j *job) After() {
 func main() {
 	j := &job{url: "http://www.baidu.com"}
 
-	perfm.New(perfm.WithBinsNumber(15), perfm.WithParallel(5), perfm.WithDuration(5)).Start(j)
+	perfm.Start(j)
 }
