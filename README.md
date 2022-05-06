@@ -101,7 +101,7 @@ j.url = "http://www.baidu.com"
 perfm.Start(j)
 ```
 
-![test demo](./demo/screen.png)
+<img width="1358" alt="image" src="https://user-images.githubusercontent.com/11133870/167170304-6bb8a62f-4075-4409-8357-ada8a5974344.png">
 
 ## Milestone
 * version 0.1
