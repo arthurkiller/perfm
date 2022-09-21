@@ -39,28 +39,33 @@ Usage of ./redis:
 ## Examples
 
 * teseting redis set with `set` for 100000 random key and 10000000 random field range
-    ```bash
-./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 30 -r 10000000 -r2 100000 -command "set foo-__RAND2__ bar-__RAND__" -p 20 -c 1
-    ```
+    
+```bash
+  ./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 30 -r 10000000 -r2 100000 -command "set foo-__RAND2__ bar-__RAND__" -p 20 -c 1
+```
 
 * teseting redis set with `del` for 100000 random key and 10000000 random field range
-    ```bash
+    
+```bash
 ./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 30 -r 10000000 -r2 100000 -command "del foo-__RAND2__ bar-__RAND__" -p 20 -c 1
-    ```
+```
 
 * teseting tairroaring bitmap with `tr.getbit` for 100000 random key and 10000000 random field range
-    ```bash
+    
+```bash
 ./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 30 -r 10000000 -r2 100000 -command "tr.getbit foo-__RAND2__ __RAND__" -p 20 -c 1
-    ```
+```
 
 * teseting tairroaring bitmap with `tr.getbits` for 100000 random key and 100 fields under 10000000 random range
-    ```bash
+    
+```bash
 ./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 30 -r 10000000 -r2 100000 -command "tr.getbits foo-__RAND2__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__ __RAND__" -p 20
-    ```
+```
 
 * teseting tair roaring bitmap with `tr.bitopcard xor`
-    ```bash
+    
+```bash
 ./redis -h r-welcome.redis.zhangbei.rds.aliyuncs.com -a hello:world -d 60 -r 15000 -r2 10000 -command "tr.bitopcard XOR foo-__RAND2__ foo-__RAND2__" -p 10
-    ```
+```
 
 ## Welcome to try perfm to build more benchmark cases
